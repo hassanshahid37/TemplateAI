@@ -1,50 +1,41 @@
-// force deploy v2
+const fetch = require("node-fetch");
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "Missing API key" });
-    }
-
-    const { category, style, count, prompt, notes } = req.body;
+    const { prompt, count, category } = req.body;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
           {
+            role: "system",
+            content: "You generate premium design template ideas.",
+          },
+          {
             role: "user",
-            content: `
-Generate ${count} premium template ideas.
-Category: ${category}
-Style: ${style}
-Prompt: ${prompt}
-Notes: ${notes || ""}
-Return ONLY a valid JSON array.
-            `
-          }
+            content: `Generate ${count} ${category} template ideas. Prompt: ${prompt}`,
+          },
         ],
-        temperature: 0.8
-      })
+        temperature: 0.8,
+      }),
     });
 
     const data = await response.json();
 
-    return res.status(200).json(data);
-
-  } catch (err) {
-    return res.status(500).json({
-      error: "Server crash",
-      message: err.message
+    res.status(200).json({
+      templates: data.choices[0].message.content.split("\n"),
     });
+  } catch (err) {
+    res.status(500).json({ error: "Server error", details: err.message });
   }
-}
+};
