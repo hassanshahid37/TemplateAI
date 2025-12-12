@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Allow only POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
   }
@@ -7,9 +6,8 @@ export default async function handler(req, res) {
   try {
     const { category, style, count, prompt, notes } = req.body;
 
-    // Basic validation
-    if (!category || !style || !count) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: "Missing OpenAI API Key" });
     }
 
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -25,7 +23,7 @@ Generate ${count} premium template ideas.
 
 Category: ${category}
 Style: ${style}
-Prompt: ${prompt || ""}
+Prompt: ${prompt}
 Notes: ${notes || ""}
 
 Return ONLY a valid JSON array.
@@ -35,20 +33,12 @@ Return ONLY a valid JSON array.
 
     const data = await response.json();
 
-    // Safety check
-    if (!response.ok) {
-      return res.status(500).json({
-        error: "OpenAI API error",
-        details: data
-      });
-    }
-
     return res.status(200).json(data);
 
   } catch (err) {
     return res.status(500).json({
-      error: "Server error",
-      message: err.message
+      error: "Backend failed",
+      details: err.message
     });
   }
 }
