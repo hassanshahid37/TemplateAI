@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-const client = new OpenAI({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -16,50 +16,50 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const completion = await client.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content:
-            "You are a professional Canva-style template generator. Return only clean JSON.",
+            "You are a professional design assistant. Generate clean, structured template ideas.",
         },
         {
           role: "user",
-          content: `
-Generate ${count} premium design templates based on this idea:
-"${prompt}"
-
+          content: `Generate ${count} design templates for: ${prompt}. 
 Return ONLY valid JSON in this format:
 {
   "templates": [
-    {
-      "title": "Template title",
-      "subtitle": "Short subtitle",
-      "description": "One-line description"
-    }
+    { "title": "...", "description": "..." }
   ]
-}
-`,
+}`,
         },
       ],
       temperature: 0.7,
+      max_tokens: 1200,
     });
 
-    const raw = completion.choices[0].message.content;
-    const parsed = JSON.parse(raw);
+    const text = completion.choices[0].message.content;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return res.status(500).json({
+        error: "AI returned invalid JSON",
+        raw: text,
+      });
+    }
 
     return res.status(200).json({
       success: true,
       templates: parsed.templates || [],
     });
-  } catch (error) {
-    console.error("GENERATION ERROR:", error);
-
+  } catch (err) {
+    console.error("API ERROR:", err);
     return res.status(500).json({
-      success: false,
-      error: "AI generation failed",
-      details: error.message,
+      error: "Internal Server Error",
+      details: err.message,
     });
   }
 }
