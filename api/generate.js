@@ -1,62 +1,65 @@
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { prompt, count = 6 } = req.body;
+    const { prompt, count = 24 } = req.body;
 
     if (!prompt) {
-      return res.status(400).json({ error: "Prompt missing" });
+      return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You generate clean, professional Canva-style design template descriptions.",
-          },
-          {
-            role: "user",
-            content: `Generate ${count} premium templates for: ${prompt}`,
-          },
-        ],
-        temperature: 0.7,
-      }),
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a professional Canva-style template generator. Return only clean JSON.",
+        },
+        {
+          role: "user",
+          content: `
+Generate ${count} premium design templates based on this idea:
+"${prompt}"
+
+Return ONLY valid JSON in this format:
+{
+  "templates": [
+    {
+      "title": "Template title",
+      "subtitle": "Short subtitle",
+      "description": "One-line description"
+    }
+  ]
+}
+`,
+        },
+      ],
+      temperature: 0.7,
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(500).json({
-        error: "OpenAI API error",
-        details: data,
-      });
-    }
-
-    const text = data.choices?.[0]?.message?.content || "";
-
-    const templates = text
-      .split("\n")
-      .filter((t) => t.trim().length > 0)
-      .slice(0, count);
+    const raw = completion.choices[0].message.content;
+    const parsed = JSON.parse(raw);
 
     return res.status(200).json({
       success: true,
-      templates,
+      templates: parsed.templates || [],
     });
-  } catch (err) {
+  } catch (error) {
+    console.error("GENERATION ERROR:", error);
+
     return res.status(500).json({
-      error: "Server crash",
-      message: err.message,
+      success: false,
+      error: "AI generation failed",
+      details: error.message,
     });
   }
 }
