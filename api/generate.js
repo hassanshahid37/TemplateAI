@@ -1,62 +1,77 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
+  // Allow only POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
+    const { count = 24, category = "Instagram Post", style = "Dark Premium" } =
+      req.body || {};
 
-    const { category = "Instagram Post", style = "Dark Premium", count = 12 } = req.body || {};
+    const safeCount = Math.min(Math.max(Number(count) || 24, 1), 200);
 
-    // 🔐 Safety check
+    // ---------- SAFE FALLBACK (IMPORTANT) ----------
+    const fallbackTemplates = Array.from({ length: safeCount }, (_, i) => ({
+      title: `${category} #${i + 1}`,
+      description: `${style} · AI generated layout`,
+    }));
+
+    // ---------- IF NO API KEY, RETURN FALLBACK ----------
     if (!process.env.OPENAI_API_KEY) {
-      // Fallback so app NEVER breaks
-      const fallback = Array.from({ length: count }, (_, i) => ({
-        title: `${category} #${i + 1}`,
-        description: `${style} • AI generated layout`
-      }));
-      return res.status(200).json({ templates: fallback });
+      return res.status(200).json({
+        templates: fallbackTemplates,
+        source: "fallback-no-key",
+      });
     }
 
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const prompt = `
-Generate ${count} design templates.
-Category: ${category}
-Style: ${style}
-
-Return ONLY valid JSON like:
-[
-  { "title": "Template 1", "description": "Short description" }
-]
-`;
-
+    // ---------- AI CALL ----------
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7
+      messages: [
+        {
+          role: "system",
+          content:
+            "Return ONLY a JSON array of objects with title and description.",
+        },
+        {
+          role: "user",
+          content: `Generate ${safeCount} ${category} templates in ${style} style.`,
+        },
+      ],
+      temperature: 0.7,
     });
 
-    let text = completion.choices[0].message.content.trim();
+    let templates = fallbackTemplates;
 
-    // 🧠 Remove ```json wrappers if AI adds them
-    text = text.replace(/```json|```/g, "").trim();
+    try {
+      const raw = completion.choices?.[0]?.message?.content;
+      const parsed = JSON.parse(raw);
 
-    const templates = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        templates = parsed;
+      }
+    } catch (e) {
+      // silently fallback
+    }
 
-    return res.status(200).json({ templates });
-
+    return res.status(200).json({
+      templates,
+      source: "ai-or-fallback",
+    });
   } catch (err) {
-    console.error("GENERATE ERROR:", err);
-
-    // 🚑 Final safety fallback (NO 500 on UI)
-    const safe = Array.from({ length: 12 }, (_, i) => ({
-      title: `Instagram Post #${i + 1}`,
-      description: `Dark Premium • AI generated layout`
-    }));
-
-    return res.status(200).json({ templates: safe });
+    // ---------- NEVER RETURN 500 ----------
+    return res.status(200).json({
+      templates: Array.from({ length: 24 }, (_, i) => ({
+        title: `Template #${i + 1}`,
+        description: "Safe fallback template",
+      })),
+      source: "error-fallback",
+    });
   }
 }
