@@ -1,14 +1,10 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { category, prompt, count = 12 } = req.body;
-
-    if (!category || !prompt) {
-      return res.status(400).json({ error: "Missing input" });
-    }
+    const { category, style, count, prompt, notes } = req.body;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -18,65 +14,37 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 1,
         messages: [
           {
             role: "system",
-            content: `
-You are a template generator.
-
-RULES:
-- ALWAYS return a JSON ARRAY
-- MINIMUM 5 items
-- NEVER return []
-- NO explanations
-- NO markdown
-
-FORMAT:
-[
-  {
-    "title": "Instagram Post #1",
-    "style": "Dark Premium",
-    "description": "Short design description"
-  }
-]
-`
+            content: "You generate design template ideas."
           },
           {
             role: "user",
-            content: `Generate ${count} ${category} templates. Prompt: ${prompt}`
+            content: `
+Create ${count} ${category} templates.
+Style: ${style}
+Prompt: ${prompt}
+Notes: ${notes}
+
+Return ONLY JSON like:
+[
+  { "title": "...", "description": "..." }
+]
+            `
           }
-        ]
+        ],
+        temperature: 0.8
       })
     });
 
-    const raw = await response.json();
+    const data = await response.json();
+    const text = data.choices[0].message.content;
 
-    let text =
-      raw?.choices?.[0]?.message?.content ||
-      raw?.choices?.[0]?.text ||
-      "";
+    const templates = JSON.parse(text);
 
-    let templates = [];
-
-    try {
-      templates = JSON.parse(text);
-    } catch {
-      templates = [];
-    }
-
-    // 🔒 HARD FALLBACK (IMPORTANT)
-    if (!Array.isArray(templates) || templates.length === 0) {
-      templates = Array.from({ length: Math.max(5, count) }).map((_, i) => ({
-        title: `${category} Template #${i + 1}`,
-        style: "Premium",
-        description: prompt
-      }));
-    }
-
-    return res.status(200).json(templates);
-
+    res.status(200).json({ templates });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 }
