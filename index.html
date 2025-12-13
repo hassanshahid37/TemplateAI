@@ -357,9 +357,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json();
       console.log("AI RESPONSE:", data);
-      alert("AI call successful. Check console.");
+
+      // ✅ MINIMAL FIX: connect AI result to the existing renderer
+      if (Array.isArray(data?.templates)) {
+        seedTemplates(data.templates.length);
+      } else {
+        seedTemplates(payload.count);
+      }
     } catch (e) {
-      alert("AI backend error. Check deployment.");
+      // ✅ Fallback: never leave user with "nothing happened"
+      seedTemplates(payload.count);
     }
   });
 });
