@@ -4,47 +4,43 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { category, style, count, prompt, notes } = req.body;
+    const { category, style, count, prompt } = req.body;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "You generate design template ideas."
+            content: "You generate design template ideas as JSON."
           },
           {
             role: "user",
-            content: `
-Create ${count} ${category} templates.
-Style: ${style}
-Prompt: ${prompt}
-Notes: ${notes}
-
-Return ONLY JSON like:
-[
-  { "title": "...", "description": "..." }
-]
-            `
+            content: `Generate ${count} ${category} templates in ${style} style. ${prompt}
+Return JSON array like:
+[{ "title": "...", "description": "..." }]`
           }
         ],
-        temperature: 0.8
+        temperature: 0.7
       })
     });
 
     const data = await response.json();
-    const text = data.choices[0].message.content;
 
+    const text = data.choices?.[0]?.message?.content || "[]";
     const templates = JSON.parse(text);
 
-    res.status(200).json({ templates });
+    return res.status(200).json({ templates });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: "AI generation failed",
+      details: err.message
+    });
   }
 }
