@@ -169,7 +169,14 @@
     }
     
     [data-theme="dark"] select option{color:#ffffff;background:#0b1020;}
-    </style>
+    
+@keyframes floaty{
+  0%{transform:translateY(0)}
+  50%{transform:translateY(-4px)}
+  100%{transform:translateY(0)}
+}
+</style>
+
     
 </head>
 
@@ -262,7 +269,31 @@
           <span>Tip: Click any preview to open it in the Editor.</span>
           <span id="status">Ready</span>
         </div>
-      </aside>
+      
+<div class="field">
+  <label>Brand Primary Color</label>
+  <input id="brandPrimary" type="color" value="#0b5fff" />
+</div>
+<div class="row">
+  <div class="field">
+    <label>Brand Text</label>
+    <input id="brandText" type="color" value="#f6f7fb" />
+  </div>
+  <div class="field">
+    <label>Muted</label>
+    <input id="brandMuted" type="color" value="#aab0bd" />
+  </div>
+</div>
+<div class="field">
+  <label>Resize Preset</label>
+  <select id="resizePreset">
+    <option>Instagram Post</option>
+    <option>Instagram Story</option>
+    <option>Poster</option>
+  </select>
+</div>
+
+</aside>
     </main>
   </div>
 
@@ -418,6 +449,7 @@ currentStyle = "Dark Premium";
   }
 
   function renderMiniPreview(t){
+    const UNSPLASH = 'https://images.unsplash.com/';
     const wrap = el("div","miniPreview");
     wrap.style.width = PREVIEW_W + "px";
     wrap.style.height = PREVIEW_H + "px";
@@ -437,7 +469,10 @@ currentStyle = "Dark Premium";
     const sx = PREVIEW_W / CANVAS_W;
     const sy = PREVIEW_H / CANVAS_H;
 
+    
     const elements = Array.isArray(t?.elements) ? t.elements : [];
+    const brandPrimary = document.querySelector('#brandPrimary')?.value || '#0b5fff';
+
     elements.slice(0, 8).forEach((e, idx)=>{
       const box = el("div","miniEl");
       const x = Number(e.x ?? 0), y = Number(e.y ?? 0), w = Number(e.w ?? 120), h = Number(e.h ?? 80);
@@ -455,7 +490,13 @@ currentStyle = "Dark Premium";
       const sub = String(e.sub || "").toLowerCase();
       const looksImage = title.includes("image") || sub.includes("image") || title.includes("photo") || sub.includes("photo");
 
+      
       if(looksImage){
+        // Unsplash placeholder thumbnail
+        box.style.backgroundImage = `url(${UNSPLASH}random/300x200?sig=${idx})`;
+        box.style.backgroundSize = "cover";
+        box.style.backgroundPosition = "center";
+
         box.style.background = "rgba(255,255,255,.06)";
         box.style.border = "1px dashed rgba(255,255,255,.22)";
       }else{
@@ -464,7 +505,13 @@ currentStyle = "Dark Premium";
       }
 
       if(document.body.getAttribute("data-theme")==="light"){
-        if(looksImage){
+        
+      if(looksImage){
+        // Unsplash placeholder thumbnail
+        box.style.backgroundImage = `url(${UNSPLASH}random/300x200?sig=${idx})`;
+        box.style.backgroundSize = "cover";
+        box.style.backgroundPosition = "center";
+
           box.style.background = "rgba(10,20,60,.06)";
           box.style.border = "1px dashed rgba(10,20,60,.18)";
         }else{
@@ -511,7 +558,11 @@ currentStyle = "Dark Premium";
     glow.style.inset="-40px";
     glow.style.background="radial-gradient(180px 120px at 30% 20%, rgba(11,95,255,.22), transparent 60%)";
     glow.style.pointerEvents="none";
+    
+    // subtle animation preview
+    wrap.style.animation = "floaty 6s ease-in-out infinite";
     wrap.appendChild(glow);
+
 
     return wrap;
   }
