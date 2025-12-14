@@ -695,7 +695,8 @@ currentStyle = "Dark Premium";
       const data = await res.json();
 
       const templates = Array.isArray(data?.templates) ? data.templates : [];
-      if(!templates.length) throw new Error("Empty templates");
+      // accept AI templates even with extra metadata
+      if(!templates.length){ throw new Error("Empty templates"); }
 
       // Ensure editor-friendly fields exist
       const normalized = templates.map((t, i)=>({
