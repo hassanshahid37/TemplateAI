@@ -337,6 +337,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   btn.addEventListener("click", async () => {
+if (event?.target?.id !== "generateBtn") return;
+
+currentLayout = "Modern";
+currentStyle = "Dark Premium";
+
     const payload = {
       category: document.getElementById("cat")?.value || "Instagram Post",
       style: document.getElementById("style")?.value || "Dark Premium",
@@ -392,8 +397,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnAnimate")?.addEventListener("click", () => {
     alert("Animate – coming soon");
   });
-</script>
-<script>
+
+<script type="module">
+import { layouts, styles } from "./design.js";
+let currentLayout = "Modern";
+let currentStyle = "Dark Premium";
+
+
+// all your existing JS stays exactly the same below
+
   const layouts = ["Bold", "Clean", "Modern", "Minimal", "Vibrant"];
   const styles = ["Dark Premium", "Light Minimal", "Neon", "Glassmorphism", "Corporate"];
 
@@ -402,7 +414,10 @@ document.addEventListener("DOMContentLoaded", () => {
     [...grid.children].forEach((tile, i) => {
       const span = tile.querySelector("span");
       if (span) {
-        span.textContent = `${styles[i % styles.length]} • ${layouts[Math.floor(Math.random()*layouts.length)]} layout • Click to edit`;
+        currentLayout = layouts[Math.floor(Math.random() * layouts.length)];
+      span.textContent = `${currentStyle} • ${currentLayout} layout • Click to edit`;
+
+
       }
     });
     statusEl.textContent = "New layout applied";
@@ -413,7 +428,11 @@ document.addEventListener("DOMContentLoaded", () => {
     [...grid.children].forEach((tile, i) => {
       const span = tile.querySelector("span");
       if (span) {
-        span.textContent = `${styles[Math.floor(Math.random()*styles.length)]} • Modern layout • Click to edit`;
+        
+      currentStyle = styles[Math.floor(Math.random() * styles.length)];
+     span.textContent = `${currentStyle} • ${currentLayout} layout • Click to edit`;
+
+
       }
     });
     statusEl.textContent = "New style applied";
