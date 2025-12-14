@@ -302,6 +302,43 @@
   const grid = $("#previewGrid");
   const statusEl = $("#status");
 
+  // ===== Content Intelligence v7 =====
+  function smartHeadline(meta){
+    const bank = [
+      "Elevate Your Brand Presence",
+      "Bold Ideas That Convert",
+      "Design That Gets Attention",
+      "Make Your Message Stand Out",
+      "Premium Visuals, Real Impact",
+      "Create. Publish. Grow.",
+      "Turn Views Into Action"
+    ];
+    if(meta?.prompt && meta.prompt.length > 6) return meta.prompt.slice(0, 42);
+    return bank[Math.floor(Math.random()*bank.length)];
+  }
+
+  function smartSub(meta){
+    const bank = [
+      "Clean layout • Strong hierarchy • Ready to edit",
+      "Designed for engagement and clarity",
+      "Modern spacing with premium typography",
+      "Optimized for social media performance",
+      "High-contrast visuals that convert"
+    ];
+    return bank[Math.floor(Math.random()*bank.length)];
+  }
+
+  function imageKeyword(meta){
+    const p = (meta?.prompt||"").toLowerCase();
+    if(p.includes("food")) return "food";
+    if(p.includes("fitness")||p.includes("health")) return "fitness";
+    if(p.includes("fashion")) return "fashion";
+    if(p.includes("tech")) return "technology";
+    if(p.includes("travel")) return "travel";
+    return "business";
+  }
+
+
   function setTheme(next){
     document.body.setAttribute("data-theme", next);
     localStorage.setItem("templify_theme", next);
@@ -435,6 +472,43 @@ currentStyle = "Dark Premium";
   const $ = (s)=>document.querySelector(s);
   const grid = $("#previewGrid");
   const statusEl = $("#status");
+
+  // ===== Content Intelligence v7 =====
+  function smartHeadline(meta){
+    const bank = [
+      "Elevate Your Brand Presence",
+      "Bold Ideas That Convert",
+      "Design That Gets Attention",
+      "Make Your Message Stand Out",
+      "Premium Visuals, Real Impact",
+      "Create. Publish. Grow.",
+      "Turn Views Into Action"
+    ];
+    if(meta?.prompt && meta.prompt.length > 6) return meta.prompt.slice(0, 42);
+    return bank[Math.floor(Math.random()*bank.length)];
+  }
+
+  function smartSub(meta){
+    const bank = [
+      "Clean layout • Strong hierarchy • Ready to edit",
+      "Designed for engagement and clarity",
+      "Modern spacing with premium typography",
+      "Optimized for social media performance",
+      "High-contrast visuals that convert"
+    ];
+    return bank[Math.floor(Math.random()*bank.length)];
+  }
+
+  function imageKeyword(meta){
+    const p = (meta?.prompt||"").toLowerCase();
+    if(p.includes("food")) return "food";
+    if(p.includes("fitness")||p.includes("health")) return "fitness";
+    if(p.includes("fashion")) return "fashion";
+    if(p.includes("tech")) return "technology";
+    if(p.includes("travel")) return "travel";
+    return "business";
+  }
+
   // --- Mini Preview Renderer (Canva-style) ---
   // Draws a tiny representation of template.elements inside each tile.
   const PREVIEW_W = 240;
@@ -505,7 +579,7 @@ function renderMiniPreview(t){
       
       if(looksImage){
         // Unsplash placeholder thumbnail
-        box.style.backgroundImage = `url(${UNSPLASH}random/600x400?sig=${idx})`; box.style.opacity = '0.95';
+        box.style.backgroundImage = `url(${UNSPLASH}random/600x400?${imageKeyword(meta)}&sig=${idx})`; box.style.opacity = '0.95';
         box.style.backgroundSize = "cover";
         box.style.backgroundPosition = "center";
 
@@ -520,7 +594,7 @@ function renderMiniPreview(t){
         
       if(looksImage){
         // Unsplash placeholder thumbnail
-        box.style.backgroundImage = `url(${UNSPLASH}random/600x400?sig=${idx})`; box.style.opacity = '0.95';
+        box.style.backgroundImage = `url(${UNSPLASH}random/600x400?${imageKeyword(meta)}&sig=${idx})`; box.style.opacity = '0.95';
         box.style.backgroundSize = "cover";
         box.style.backgroundPosition = "center";
 
@@ -601,8 +675,8 @@ function renderMiniPreview(t){
       div.className = "tile";
       div.tabIndex = 0;
 
-      const title = t.title || t.name || `${meta.category} #${i+1}`;
-      const desc  = t.description || `${meta.style} • ${meta.layout} • Click to edit`;
+      const title = smartHeadline(meta);
+      const desc  = smartSub(meta);
 
       div.innerHTML = "";
 
