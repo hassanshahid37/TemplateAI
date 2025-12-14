@@ -1,75 +1,65 @@
+import OpenAI from "openai";
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY missing" });
 
   try {
     const { category="Instagram Post", style="Dark Premium", prompt="", notes="", count=24 } = req.body || {};
     const n = Math.min(200, Math.max(1, parseInt(count || 24, 10)));
 
-    const system = "You generate Canva-level layouts. Output STRICT JSON only. No markdown. No extra text.";
-    const user = `
-Generate ${n} premium templates for a 980x620 canvas.
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: "You are a Canva-level template generator. Respond ONLY with valid JSON. No text outside JSON." },
+        { role: "user", content:
+`Generate ${n} premium templates for a 980x620 canvas.
 
 Category: ${category}
 Style: ${style}
-Prompt: ${prompt}
+User prompt: ${prompt}
 Notes: ${notes}
 
-Return STRICT JSON only:
+Return STRICT JSON ONLY:
 
 {
   "templates":[
     {
       "title":"${category} #1",
       "description":"1-line premium description",
+      "canvas":{"w":980,"h":620},
       "elements":[
-        { "x":120, "y":110, "w":740, "h":160, "title":"Headline text", "sub":"Support text" },
-        { "x":120, "y":290, "w":520, "h":150, "title":"Feature", "sub":"Short benefit" },
-        { "x":680, "y":110, "w":260, "h":330, "title":"Image", "sub":"Drop image here" }
+        {"x":80,"y":70,"w":560,"h":160,"title":"Headline","sub":"Support text"},
+        {"x":80,"y":250,"w":420,"h":220,"title":"Key Point","sub":"Short benefit line"},
+        {"x":540,"y":70,"w":360,"h":400,"title":"Image","sub":"Drop image here"},
+        {"x":80,"y":500,"w":820,"h":90,"title":"CTA","sub":"Call to action"}
       ]
     }
   ]
 }
 
 Rules:
-- elements must fit 980x620
 - 3–6 elements per template
-- strong hierarchy, premium spacing
-- use short, brand-ready text
-- JSON only
-`;
-
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.7,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user }
-        ]
-      })
+- All elements must fit inside 980x620
+- Strong hierarchy and modern spacing
+- Text should be short, brand-ready
+- JSON ONLY.` }
+      ]
     });
 
-    const raw = await r.json();
-    const content = raw?.choices?.[0]?.message?.content || "";
+    const content = completion?.choices?.[0]?.message?.content || "";
     const s = content.indexOf("{");
     const e = content.lastIndexOf("}");
-    if (s === -1 || e === -1) throw new Error("AI returned non-JSON");
+    if (s === -1 || e === -1) throw new Error("Non-JSON response");
 
     const data = JSON.parse(content.slice(s, e + 1));
-    if (!Array.isArray(data.templates)) throw new Error("templates missing");
+    if (!Array.isArray(data.templates)) throw new Error("Missing templates");
 
     res.status(200).json({ success: true, templates: data.templates });
   } catch (err) {
-    console.error("generate error:", err);
-    // Let frontend fall back to local engine
-    res.status(500).json({ error: "AI generation failed" });
+    console.error("generate error", err);
+    res.status(500).json({ error: "Generation failed" });
   }
 }
