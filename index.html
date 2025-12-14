@@ -188,6 +188,9 @@
         <span class="tag">No auth • No subscriptions • Netlify-ready</span>
         <button class="btn" id="themeBtn" type="button">🌗 Toggle theme</button>
         <button class="btn primary" id="openEditor" type="button">Open Editor</button>
+        <button class="btn" id="btnTemplates" type="button">📚 Library</button>
+        <button class="btn" id="btnAnimate" type="button">🎬 Animate</button>
+
       </div>
     </header>
 
@@ -201,6 +204,9 @@
 
         <div class="actions" style="margin-top:14px">
           <button class="btn primary" id="generateBtn" type="button">⚡ Generate Templates</button>
+        <button class="btn" id="newLayoutBtn" type="button">🧩 New Layout</button>
+        <button class="btn" id="newStyleBtn" type="button">🎨 New Style</button>
+
           <button class="btn" id="exportBtn" type="button">⬇ Export List (JSON)</button>
         </div>
 
@@ -377,6 +383,41 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+</script>
+<script>
+  document.getElementById("btnTemplates")?.addEventListener("click", () => {
+    alert("Templates Library– coming soon");
+  });
+
+  document.getElementById("btnAnimate")?.addEventListener("click", () => {
+    alert("Animate – coming soon");
+  });
+</script>
+<script>
+  const layouts = ["Bold", "Clean", "Modern", "Minimal", "Vibrant"];
+  const styles = ["Dark Premium", "Light Minimal", "Neon", "Glassmorphism", "Corporate"];
+
+  // NEW LAYOUT = reshuffle layout text only
+  document.getElementById("newLayoutBtn")?.addEventListener("click", () => {
+    [...grid.children].forEach((tile, i) => {
+      const span = tile.querySelector("span");
+      if (span) {
+        span.textContent = `${styles[i % styles.length]} • ${layouts[Math.floor(Math.random()*layouts.length)]} layout • Click to edit`;
+      }
+    });
+    statusEl.textContent = "New layout applied";
+  });
+
+  // NEW STYLE = reshuffle style only
+  document.getElementById("newStyleBtn")?.addEventListener("click", () => {
+    [...grid.children].forEach((tile, i) => {
+      const span = tile.querySelector("span");
+      if (span) {
+        span.textContent = `${styles[Math.floor(Math.random()*styles.length)]} • Modern layout • Click to edit`;
+      }
+    });
+    statusEl.textContent = "New style applied";
+  });
 </script>
 
 </body>
