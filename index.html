@@ -174,7 +174,8 @@
 </head>
 
 <body data-theme="dark">
-  <div class="wrap">
+    <script src="design.js"></script>
+<div class="wrap">
     <header>
       <div class="brand">
         <div class="logo" aria-hidden="true"></div>
@@ -266,6 +267,7 @@
     </main>
   </div>
 
+<script>window.applyPhase2Style = window.applyPhase2Style || function(){};</script>
 <script>
   const $ = (s)=>document.querySelector(s);
 
@@ -379,10 +381,10 @@
       div.className = "tile";
       div.tabIndex = 0;
       div.innerHTML = `<b>${t.title}</b><span>${t.description}</span>`;
-      div.addEventListener("click", ()=>openEditorWith(t));
+            try{ window.applyPhase2Style(div, __lastTemplates.length); }catch(e){}
+div.addEventListener("click", ()=>openEditorWith(t));
       div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
-      applyPhase2Style(div, typeof i!=='undefined'?i:(typeof index!=='undefined'?index:0));
-grid.appendChild(div);
+      grid.appendChild(div);
     }
   }
   }
@@ -481,10 +483,10 @@ currentStyle = "Dark Premium";
         div.className = "tile";
         div.tabIndex = 0;
         div.innerHTML = `<b>${t.title}</b><span>${t.description}</span>`;
-        div.addEventListener("click", ()=>openEditorWith(t));
+                try{ window.applyPhase2Style(div, grid.children.length); }catch(e){}
+div.addEventListener("click", ()=>openEditorWith(t));
         div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
-        applyPhase2Style(div, typeof i!=='undefined'?i:(typeof index!=='undefined'?index:0));
-grid.appendChild(div);
+        grid.appendChild(div);
       });
       statusEl.textContent = `Generated ${__lastTemplates.length}`;
     } catch (e) {
@@ -502,58 +504,6 @@ grid.appendChild(div);
   document.getElementById("btnAnimate")?.addEventListener("click", () => {
     alert("Animate – coming soon");
   });
-</script>
-
-<script type="module">
-// Nexora: New Layout + New Style (SAFE)
-// UI unchanged. Only updates the preview tile TEXT.
-
-const layouts = ["Bold","Clean","Modern","Minimal","Vibrant"];
-const styles  = ["Dark Premium","Light Minimal","Neon","Glassmorphism","Corporate"];
-
-const grid = document.getElementById("previewGrid");
-const statusEl = document.getElementById("status");
-
-function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-function setStatus(msg){ if(statusEl) statusEl.textContent = msg; }
-
-function updateTilesText({layout=null, style=null}={}){
-  if(!grid) return;
-  const tiles = Array.from(grid.querySelectorAll(".tile"));
-  tiles.forEach((tile, i) => {
-    const span = tile.querySelector("span");
-    if(!span) return;
-    const curStyle = style || (document.getElementById("style")?.value) || "Dark Premium";
-    const curLayout = layout || span.textContent.match(/\b(Bold|Clean|Modern|Minimal|Vibrant)\b/)?.[0] || "Modern";
-    span.textContent = `${curStyle} • ${curLayout} layout • Click to edit`;
-  });
-}
-
-document.getElementById("newLayoutBtn")?.addEventListener("click", () => {
-  updateTilesText({ layout: pick(layouts) });
-  setStatus("New layout applied");
-});
-
-document.getElementById("newStyleBtn")?.addEventListener("click", () => {
-  const s = pick(styles);
-  // keep dropdown in sync if it exists
-  const sel = document.getElementById("style");
-  if(sel){
-    const opt = Array.from(sel.options).find(o => o.textContent.trim() === s);
-    if(opt) sel.value = opt.textContent.trim();
-  }
-  updateTilesText({ style: s });
-  setStatus("New style applied");
-});
-
-</script>
-
-  <script src="design.js"></script>
-
-<script>
-if (typeof applyPhase2Style !== "function") {
-  window.applyPhase2Style = function(){ /* no-op */ };
-}
 </script>
 
 </body>
