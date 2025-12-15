@@ -516,6 +516,20 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     autosave: true,
   };
 
+  // Load a generated template (if provided by index)
+  try{
+    if(draft?.template?.elements && Array.isArray(draft.template.elements)){
+      state.elements = draft.template.elements.map(e => ({
+        id: e.id || uid(),
+        x: Number(e.x ?? 80), y: Number(e.y ?? 80),
+        w: Number(e.w ?? 420), h: Number(e.h ?? 120),
+        title: String(e.title ?? "TEXT"),
+        sub: String(e.sub ?? "")
+      }));
+    }
+  }catch(e){}
+
+
   // Helpers
   function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 
@@ -610,7 +624,12 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     }
   }
 
-  function escapeHtml(str){
+  
+  // Initial paint
+  renderAll();
+  updateUI();
+
+function escapeHtml(str){
     return String(str??"").replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
   }
 
