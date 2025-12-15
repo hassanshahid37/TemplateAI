@@ -1,48 +1,38 @@
+// Phase 2 – Dark Premium + Modern Neon (UI SAFE)
 
-/* Nexora Phase 2.1 – Visual Engine (Dark Premium + Modern Neon)
-   UI SAFE – logic only
-*/
+function applyPhase2Style(card, index) {
+  const isNeon = index % 2 === 1;
 
-export const STYLE_PACKS = {
-  darkPremium: {
-    name: "Dark Premium",
-    bg: "linear-gradient(135deg,#050712,#0b1025)",
-    card: "rgba(255,255,255,0.06)",
-    accent: "#c9a24d",
-    text: "#f6f7fb",
-    muted: "#aab0bd"
-  },
-  neon: {
-    name: "Modern Neon",
-    bg: "linear-gradient(135deg,#050712,#090019)",
-    card: "rgba(255,255,255,0.05)",
-    accent: "#00f0ff",
-    text: "#ffffff",
-    muted: "#b9b9ff"
+  card.style.borderRadius = "18px";
+  card.style.padding = "18px";
+  card.style.position = "relative";
+  card.style.overflow = "hidden";
+
+  if (isNeon) {
+    // Modern Neon
+    card.style.background =
+      "linear-gradient(135deg, #050712, #0a0020)";
+    card.style.boxShadow =
+      "0 0 0 1px rgba(0,240,255,0.25), 0 20px 40px rgba(0,240,255,0.15)";
+  } else {
+    // Dark Premium
+    card.style.background =
+      "linear-gradient(135deg, #050712, #0b1025)";
+    card.style.boxShadow =
+      "0 0 0 1px rgba(255,255,255,0.08), 0 18px 45px rgba(0,0,0,0.6)";
   }
-};
-
-export function applyVisual(template, cardEl){
-  const style = template.stylePack === "neon"
-    ? STYLE_PACKS.neon
-    : STYLE_PACKS.darkPremium;
-
-  cardEl.style.background = style.card;
-  cardEl.style.border = "1px solid rgba(255,255,255,0.08)";
-  cardEl.style.boxShadow = `0 20px 40px ${style.accent}22`;
-  cardEl.style.position = "relative";
-  cardEl.style.overflow = "hidden";
 
   const badge = document.createElement("div");
-  badge.textContent = style.name;
+  badge.textContent = isNeon ? "Neon" : "Dark Premium";
   badge.style.position = "absolute";
-  badge.style.top = "10px";
-  badge.style.right = "10px";
+  badge.style.top = "12px";
+  badge.style.right = "12px";
   badge.style.fontSize = "11px";
-  badge.style.fontWeight = "600";
-  badge.style.padding = "4px 8px";
-  badge.style.borderRadius = "20px";
-  badge.style.background = style.accent;
+  badge.style.padding = "4px 10px";
+  badge.style.borderRadius = "999px";
+  badge.style.background = isNeon ? "#00f0ff" : "#c9a24d";
   badge.style.color = "#000";
-  cardEl.appendChild(badge);
+  badge.style.fontWeight = "600";
+
+  card.appendChild(badge);
 }
