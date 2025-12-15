@@ -1,32 +1,27 @@
-// Phase 2 – Dark Premium + Modern Neon (UI SAFE)
-
-function applyPhase2Style(card, index) {
+// Phase 2 – Dark Premium + Modern Neon (SAFE VISUAL ONLY)
+function applyPhase2Style(tile, index){
   const isNeon = index % 2 === 1;
 
-  card.style.borderRadius = "18px";
-  card.style.padding = "18px";
-  card.style.position = "relative";
-  card.style.overflow = "hidden";
+  tile.style.borderRadius = "18px";
+  tile.style.position = "relative";
+  tile.style.overflow = "hidden";
 
-  if (isNeon) {
-    // Modern Neon
-    card.style.background =
-      "linear-gradient(135deg, #050712, #0a0020)";
-    card.style.boxShadow =
-      "0 0 0 1px rgba(0,240,255,0.25), 0 20px 40px rgba(0,240,255,0.15)";
+  if(isNeon){
+    tile.style.background = "linear-gradient(135deg,#050712,#0a0020)";
+    tile.style.boxShadow = "0 0 0 1px rgba(0,240,255,.25), 0 18px 40px rgba(0,240,255,.15)";
   } else {
-    // Dark Premium
-    card.style.background =
-      "linear-gradient(135deg, #050712, #0b1025)";
-    card.style.boxShadow =
-      "0 0 0 1px rgba(255,255,255,0.08), 0 18px 45px rgba(0,0,0,0.6)";
+    tile.style.background = "linear-gradient(135deg,#050712,#0b1025)";
+    tile.style.boxShadow = "0 0 0 1px rgba(255,255,255,.08), 0 18px 40px rgba(0,0,0,.55)";
   }
 
+  if(tile.querySelector(".p2-badge")) return;
+
   const badge = document.createElement("div");
+  badge.className = "p2-badge";
   badge.textContent = isNeon ? "Neon" : "Dark Premium";
   badge.style.position = "absolute";
-  badge.style.top = "12px";
-  badge.style.right = "12px";
+  badge.style.top = "10px";
+  badge.style.right = "10px";
   badge.style.fontSize = "11px";
   badge.style.padding = "4px 10px";
   badge.style.borderRadius = "999px";
@@ -34,5 +29,5 @@ function applyPhase2Style(card, index) {
   badge.style.color = "#000";
   badge.style.fontWeight = "600";
 
-  card.appendChild(badge);
+  tile.appendChild(badge);
 }
