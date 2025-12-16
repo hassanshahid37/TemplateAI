@@ -317,313 +317,497 @@
     </main>
   </div>
 
-
 <script>
-/* Nexora / Templify — SAFE generator wiring + Canva-style previews
-   - Preserves UI/CSS
-   - No globals required
-   - No risky regex
-*/
+  const $ = (s)=>document.querySelector(s);
+  const grid = $("#previewGrid");
+  const statusEl = $("#status");
 
-const $ = (s)=>document.querySelector(s);
-const el = (id)=>document.getElementById(id);
-
-const themeBtn = el("themeBtn");
-const openEditorBtn = el("openEditor");
-const btnTemplates = el("btnTemplates");
-const btnAnimate = el("btnAnimate");
-
-const generateBtn = el("generateBtn");
-const newLayoutBtn = el("newLayoutBtn");
-const newStyleBtn = el("newStyleBtn");
-const exportBtn = el("exportBtn");
-
-const grid = el("previewGrid");
-const catSel = el("cat");
-const countInp = el("count");
-const styleSel = el("style");
-const promptInp = el("prompt");
-const notesInp = el("notes");
-const statusEl = el("status");
-
-let __lastTemplates = [];
-
-function setStatus(msg){
-  if(statusEl) statusEl.textContent = msg || "";
-}
-
-function getTheme(){
-  return document.body.getAttribute("data-theme") || "dark";
-}
-function setTheme(t){
-  document.body.setAttribute("data-theme", t);
-  localStorage.setItem("templify_theme", t);
-  themeBtn && (themeBtn.textContent = t === "dark" ? "🌙 Toggle theme" : "☀️ Toggle theme");
-}
-function toggleTheme(){
-  setTheme(getTheme()==="dark" ? "light" : "dark");
-}
-
-function safeInt(v, d){
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) ? n : d;
-}
-function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
-
-/* -------- Canva-like thumbnail rendering (hero-first) -------- */
-function renderPreview(thumb, t){
-  if(!thumb) return;
-  thumb.innerHTML = "";
-  thumb.style.background = t.bg || t.canvas?.background || "rgba(255,255,255,.06)";
-
-  // find hero heading, support text, and CTA
-  const els = Array.isArray(t.elements) ? t.elements : [];
-  const heading = els.find(e => e.type === "heading") || els.find(e => (e.type==="text" && (e.fontSize||0) >= 42)) || null;
-  const support = els.find(e => e.type === "text" && e !== heading) || null;
-  const cta = els.find(e => e.type === "button") || null;
-
-  // subtle overlay for contrast
-  const ov = document.createElement("div");
-  ov.style.position="absolute";
-  ov.style.inset="0";
-  ov.style.background="linear-gradient(180deg,rgba(0,0,0,.10),rgba(0,0,0,.48))";
-  ov.style.pointerEvents="none";
-  thumb.appendChild(ov);
-
-  if(heading){
-    const h = document.createElement("div");
-    h.className = "pv-text";
-    h.textContent = (heading.title || heading.text || "").toString();
-    h.style.top = "12px";
-    h.style.left = "12px";
-    h.style.right = "12px";
-    h.style.fontSize = "18px";
-    h.style.fontWeight = "800";
-    h.style.lineHeight = "1.1";
-    h.style.textShadow = "0 10px 26px rgba(0,0,0,.55)";
-    h.style.maxHeight = "44px";
-    h.style.overflow = "hidden";
-    h.style.whiteSpace = "normal";
-    h.style.display = "-webkit-box";
-    h.style.webkitLineClamp = "2";
-    h.style.webkitBoxOrient = "vertical";
-    h.style.color = heading.color || "#fff";
-    thumb.appendChild(h);
+  function setTheme(next){
+    document.body.setAttribute("data-theme", next);
+    localStorage.setItem("templify_theme", next);
+  }
+  function toggleTheme(){
+    const cur = document.body.getAttribute("data-theme") || "dark";
+    setTheme(cur === "dark" ? "light" : "dark");
   }
 
-  if(support){
-    const s = document.createElement("div");
-    s.className = "pv-text";
-    s.textContent = (support.title || support.text || "").toString();
-    s.style.top = "62px";
-    s.style.left = "12px";
-    s.style.right = "12px";
-    s.style.fontSize = "12px";
-    s.style.opacity = ".92";
-    s.style.maxHeight = "28px";
-    s.style.overflow = "hidden";
-    s.style.whiteSpace = "normal";
-    s.style.display = "-webkit-box";
-    s.style.webkitLineClamp = "2";
-    s.style.webkitBoxOrient = "vertical";
-    s.style.color = support.color || "rgba(255,255,255,.86)";
-    thumb.appendChild(s);
-  }
+  function drawThumb(thumb, elements, bg){
+    if(!thumb) return;
 
-  if(cta){
-    const b = document.createElement("div");
-    b.style.position="absolute";
-    b.style.left="12px";
-    b.style.bottom="12px";
-    b.style.padding="8px 12px";
-    b.style.borderRadius="999px";
-    b.style.fontSize="12px";
-    b.style.fontWeight="700";
-    b.style.background = cta.fill || cta.background || "rgba(255,255,255,.14)";
-    b.style.border = "1px solid rgba(255,255,255,.18)";
-    b.style.backdropFilter = "blur(8px)";
-    b.style.boxShadow = "0 10px 26px rgba(0,0,0,.35)";
-    b.style.color = cta.color || "#fff";
-    b.textContent = (cta.title || cta.text || "Open").toString();
-    thumb.appendChild(b);
-  }
-}
+    // Fail-safe: never break the app if preview rendering has issues
+    try{
+      const W0 = 980, H0 = 620;
+      thumb.innerHTML = "";
+      thumb.style.position = "relative";
+      thumb.style.overflow = "hidden";
 
-/* -------- Grid render -------- */
-function renderGrid(list, { category, style }){
-  __lastTemplates = Array.isArray(list) ? list : [];
-  grid.innerHTML = "";
+      const w = Math.max(1, thumb.clientWidth || 260);
+      const h = Math.max(1, thumb.clientHeight || 84);
+      const sx = w / W0;
+      const sy = h / H0;
 
-  for(let i=0;i<__lastTemplates.length;i++){
-    const t = __lastTemplates[i];
-    const tile = document.createElement("div");
-    tile.className = "tile";
-    tile.tabIndex = 0;
+      // --- background ---
+      let bgCss = bg || null;
+      if(!bgCss && Array.isArray(elements)){
+        const bgEl = elements.find(e => String(e.type||"").toLowerCase()==="background");
+        bgCss = bgEl?.fill || bgEl?.background || null;
+      }
+      if(bgCss){
+        const s = String(bgCss);
+        if(s.includes("gradient")){
+          thumb.style.backgroundImage = s;
+          thumb.style.backgroundColor = "";
+        }else{
+          thumb.style.backgroundImage = "";
+          thumb.style.backgroundColor = s;
+        }
+      }else{
+        // classy default
+        thumb.style.backgroundImage = "linear-gradient(135deg, rgba(11,95,255,.55), rgba(136,71,255,.45))";
+        thumb.style.backgroundColor = "";
+      }
 
-    // structure (keeps existing CSS expectations)
-    tile.innerHTML = `
-      <div class="thumb" aria-hidden="true"></div>
-      <b>${escapeHtml(t.title || `${category} #${i+1}`)}</b>
-      <span>${escapeHtml((t.description || `${style} • Click to edit`))}</span>
-    `;
+      // subtle vignette for contrast
+      const vignette = document.createElement("div");
+      vignette.style.position = "absolute";
+      vignette.style.inset = "0";
+      vignette.style.background = "radial-gradient(120px 80px at 20% 20%, rgba(255,255,255,.12), transparent 60%), linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.25))";
+      vignette.style.pointerEvents = "none";
+      thumb.appendChild(vignette);
 
-    const thumb = tile.querySelector(".thumb");
-    thumb.style.position = "relative"; // required for overlay + CTA
-    renderPreview(thumb, t);
+      const list = Array.isArray(elements) ? elements.slice(0, 18) : [];
 
-    tile.addEventListener("click", ()=>openEditorWith(t, { category, style }));
-    tile.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t, { category, style }); });
+      // helper
+      const place = (el, e) => {
+        const x = Number(e.x ?? 0) * sx;
+        const y = Number(e.y ?? 0) * sy;
+        const ww = Number(e.w ?? e.width ?? 120) * sx;
+        const hh = Number(e.h ?? e.height ?? 40) * sy;
+        el.style.position = "absolute";
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+        el.style.width = Math.max(2, ww) + "px";
+        el.style.height = Math.max(2, hh) + "px";
+      };
 
-    grid.appendChild(tile);
-  }
-}
+      // --- render blocks first (image/cards/shapes) ---
+      const blockTypes = new Set(["image","shape","card"]);
+      list.filter(e => blockTypes.has(String(e.type||"").toLowerCase())).slice(0, 4).forEach((e) => {
+        const type = String(e.type||"").toLowerCase();
+        const d = document.createElement("div");
+        place(d, e);
 
-function openEditorWith(tpl, { category, style }){
-  const payload = {
-    meta: { cat: category, style },
-    canvas: tpl.canvas || { w: 980, h: 620 },
-    elements: tpl.elements || []
-  };
-  try{ localStorage.setItem("templify_draft", JSON.stringify(payload)); }catch(e){}
-  window.location.href = "editor.html";
-}
+        const r = Number(e.radius ?? (type==="image" ? 16 : 14));
+        d.style.borderRadius = Math.max(10, r * Math.min(sx,sy)) + "px";
+        d.style.border = "1px solid rgba(255,255,255,.18)";
+        d.style.boxShadow = "0 8px 18px rgba(0,0,0,.22)";
 
-/* -------- Safe HTML escape for titles/descriptions -------- */
-function escapeHtml(s){
-  return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#39;");
-}
+        if(type === "image"){
+          d.style.background = e.background || "linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.06))";
+        }else{
+          d.style.background = e.background || "rgba(255,255,255,.10)";
+        }
+        d.style.backdropFilter = "blur(6px)";
+        d.style.pointerEvents = "none";
+        thumb.appendChild(d);
+      });
 
-/* -------- Seed (instant) templates before Generate -------- */
-function makeSeedTemplates({ count, category, style }){
-  const seeds = [];
-  const seedBg = [
-    "linear-gradient(135deg,#0b5fff,#7b5cff)",
-    "linear-gradient(135deg,#07130f,#00c389)",
-    "linear-gradient(135deg,#1f1409,#ffcc66)",
-    "linear-gradient(135deg,#0b1020,#00d1ff)",
-  ];
-  for(let i=0;i<count;i++){
-    const bg = seedBg[i % seedBg.length];
-    seeds.push({
-      id: `seed_${Date.now()}_${i}`,
-      title: `${category} #${i+1}`,
-      description: `${style} • Ready • Click to edit`,
-      category,
-      style,
-      bg,
-      canvas: { w: 980, h: 620 },
-      elements: [
-        { id:`h_${i}`, type:"heading", x:80, y:90, w:820, h:90, title:"New Collection", fontSize:64, fontWeight:800, color:"#fff" },
-        { id:`t_${i}`, type:"text", x:80, y:180, w:620, h:60, title:"Premium layout with bold hierarchy and clean spacing.", fontSize:20, fontWeight:500, color:"rgba(255,255,255,.86)" },
-        { id:`b_${i}`, type:"button", x:80, y:270, w:220, h:54, title:"Get Started", fill:"rgba(255,255,255,.14)", color:"#fff", radius:999 }
-      ]
-    });
-  }
-  return seeds;
-}
+      // --- badge ---
+      const badge = list.find(e => String(e.type||"").toLowerCase()==="badge");
+      if(badge){
+        const b = document.createElement("div");
+        place(b, badge);
+        b.style.height = Math.max(10, Number(badge.h ?? 46) * sy) + "px";
+        b.style.borderRadius = "999px";
+        b.style.border = "1px solid rgba(255,255,255,.20)";
+        b.style.background = "rgba(0,0,0,.18)";
+        b.style.display = "flex";
+        b.style.alignItems = "center";
+        b.style.padding = "0 10px";
+        b.style.fontSize = Math.max(9, (Number(badge.fontSize ?? 14) * Math.min(sx,sy))) + "px";
+        b.style.fontWeight = String(badge.fontWeight ?? 800);
+        b.style.letterSpacing = ".3px";
+        b.style.color = badge.color || "rgba(255,255,255,.92)";
+        b.style.textTransform = "uppercase";
+        b.style.whiteSpace = "nowrap";
+        b.style.overflow = "hidden";
+        b.style.textOverflow = "ellipsis";
+        b.textContent = (badge.title || "").toString().slice(0, 32) || "NEW";
+        b.style.pointerEvents = "none";
+        thumb.appendChild(b);
+      }
 
-/* -------- API Generate -------- */
-async function generateFromApi(){
-  const category = catSel?.value || "Instagram Post";
-  const style = styleSel?.value || "Dark Premium";
-  const count = clamp(safeInt(countInp?.value, 24), 1, 200);
-  const prompt = (promptInp?.value || "").trim();
-  const notes = (notesInp?.value || "").trim();
+      // --- headline + subline ---
+      const heading = list.find(e => String(e.type||"").toLowerCase()==="heading") || list.find(e => String(e.type||"").toLowerCase()==="subhead");
+      if(heading){
+        const t = document.createElement("div");
+        place(t, heading);
+        t.style.height = "auto";
+        t.style.maxHeight = (Math.max(18, Number(heading.h ?? 120) * sy)) + "px";
+        t.style.fontWeight = String(heading.fontWeight ?? 800);
+        t.style.color = heading.color || "#fff";
+        t.style.fontSize = Math.max(12, (Number(heading.fontSize ?? 54) * Math.min(sx,sy))) + "px";
+        t.style.lineHeight = "1.05";
+        t.style.textShadow = "0 8px 18px rgba(0,0,0,.35)";
+        t.style.display = "-webkit-box";
+        t.style.webkitLineClamp = "2";
+        t.style.webkitBoxOrient = "vertical";
+        t.style.overflow = "hidden";
+        t.textContent = (heading.title || "").toString().trim() || "Premium Design";
+        t.style.pointerEvents = "none";
+        thumb.appendChild(t);
+      }
 
-  setStatus("Generating…");
+      const body = list.find(e => String(e.type||"").toLowerCase()==="text" || String(e.type||"").toLowerCase()==="subhead");
+      if(body){
+        const t = document.createElement("div");
+        place(t, body);
+        t.style.height = "auto";
+        t.style.maxHeight = (Math.max(14, Number(body.h ?? 80) * sy)) + "px";
+        t.style.fontWeight = "500";
+        t.style.color = body.color || "rgba(255,255,255,.85)";
+        t.style.fontSize = Math.max(9, (Number(body.fontSize ?? 16) * Math.min(sx,sy))) + "px";
+        t.style.lineHeight = "1.15";
+        t.style.display = "-webkit-box";
+        t.style.webkitLineClamp = "2";
+        t.style.webkitBoxOrient = "vertical";
+        t.style.overflow = "hidden";
+        const s = (body.sub || body.title || "").toString().trim().replace(/\s+/g," ");
+        t.textContent = s.slice(0, 60);
+        t.style.pointerEvents = "none";
+        thumb.appendChild(t);
+      }
 
-  try{
-    const res = await fetch("/api/generate", {
-      method:"POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ category, style, count, prompt, notes })
-    });
-    const data = await res.json().catch(()=>null);
+      // --- CTA button ---
+      const cta = list.find(e => String(e.type||"").toLowerCase()==="cta");
+      if(cta){
+        const b = document.createElement("div");
+        place(b, cta);
+        b.style.height = Math.max(10, Number(cta.h ?? 54) * sy) + "px";
+        b.style.borderRadius = Math.max(10, Number(cta.radius ?? 16) * Math.min(sx,sy)) + "px";
+        b.style.background = cta.background || "linear-gradient(135deg, rgba(11,95,255,.95), rgba(136,71,255,.85))";
+        b.style.border = "1px solid rgba(255,255,255,.18)";
+        b.style.boxShadow = "0 10px 20px rgba(11,95,255,.20)";
+        b.style.display = "flex";
+        b.style.alignItems = "center";
+        b.style.justifyContent = "center";
+        b.style.padding = "0 10px";
+        b.style.fontSize = Math.max(9, (Number(cta.fontSize ?? 14) * Math.min(sx,sy))) + "px";
+        b.style.fontWeight = String(cta.fontWeight ?? 800);
+        b.style.color = cta.color || "#fff";
+        b.style.whiteSpace = "nowrap";
+        b.style.overflow = "hidden";
+        b.style.textOverflow = "ellipsis";
+        b.textContent = (cta.title || "Get Started").toString().slice(0, 22);
+        b.style.pointerEvents = "none";
+        thumb.appendChild(b);
+      }
 
-    const list = data?.templates;
-    if(Array.isArray(list) && list.length){
-      renderGrid(list, { category, style });
-      setStatus(`Generated ${list.length} templates`);
-      try{ localStorage.setItem("templify_last_templates", JSON.stringify(list)); }catch(e){}
-      return;
+    }catch(err){
+      console.warn("Preview render failed; using fallback boxes.", err);
+      try{
+        // fallback: simple minis (never crash)
+        thumb.innerHTML = "";
+        const w0 = 980, h0 = 620;
+        const sx = (thumb.clientWidth||260) / w0;
+        const sy = (thumb.clientHeight||84) / h0;
+        (elements||[]).slice(0,6).forEach((e) => {
+          const m = document.createElement("div");
+          m.className = "mini";
+          m.style.left = (Number(e.x||0)*sx) + "px";
+          m.style.top = (Number(e.y||0)*sy) + "px";
+          m.style.width = (Number(e.w||e.width||120)*sx) + "px";
+          m.style.height = (Number(e.h||e.height||40)*sy) + "px";
+          thumb.appendChild(m);
+        });
+      }catch(_){}
     }
-
-    // fallback: keep seeds
-    setStatus("No templates returned — showing defaults");
-    renderGrid(makeSeedTemplates({ count, category, style }), { category, style });
-
-  }catch(err){
-    console.warn(err);
-    setStatus("Generate failed — showing defaults");
-    renderGrid(makeSeedTemplates({ count, category, style }), { category, style });
   }
-}
 
-/* -------- Buttons wiring -------- */
-themeBtn && themeBtn.addEventListener("click", toggleTheme);
-openEditorBtn && openEditorBtn.addEventListener("click", ()=>{ window.location.href="editor.html"; });
 
-generateBtn && generateBtn.addEventListener("click", generateFromApi);
+  function seedTemplates(n){
+    grid.innerHTML = "";
+    __lastTemplates = [];
+    const category = $("#cat").value;
+    const style = $("#style").value;
 
-newLayoutBtn && newLayoutBtn.addEventListener("click", ()=>{
-  // lightweight: shuffle tiles for instant "new layout" feel without breaking schema
-  __lastTemplates = (__lastTemplates||[]).slice().sort(()=>Math.random()-0.5);
-  renderGrid(__lastTemplates, { category: catSel.value, style: styleSel.value });
-  setStatus("New layout (shuffled)");
-});
+    // Simple "real" layouts for the editor (cards on canvas)
+    const patterns = [
+      // Hero + CTA
+      (i)=> ([
+        { type: "background", x:0,y:0,w:980,h:620, title:"BG", sub:"", fill:"linear-gradient(135deg,#0b5fff,#7b5cff)" },
+        { type: "heading", x: 80, y: 70,  w: 820, h: 120, title: "Grow Your Brand", sub: "", fontSize: 72, fontWeight: 800, color:"#ffffff" },
+        { type: "text", x: 80, y: 210, w: 620, h: 110, title: "",  sub: "Premium design with clear hierarchy and focus." },
+        { type: "cta", x: 80, y: 350, w: 360, h: 110, title: "Shop Now", sub: "" },
+        { type: "image", x: 520,y: 260, w: 380, h: 300, title: "", sub: "" },
+      ]),
+      // Split left text / right image
+      (i)=> ([
+        { type: "heading", x: 70, y: 80,  w: 420, h: 150, title: "New Collection", sub: "" },
+        { type: "text", x: 70, y: 250, w: 420, h: 170, title: "",  sub: "• Premium quality\n• Fast delivery\n• Limited offer" },
+        { type: "image", x: 520,y: 80,  w: 390, h: 360, title: "", sub: "" },
+      ]),
+      // Badge + centered headline
+      (i)=> ([
+        { type: "badge", x: 320,y: 70,  w: 320, h: 70,  title: "LIMITED", sub: "" },
+        { type: "heading", x: 160,y: 190, w: 660, h: 150, title: "Flash Sale", sub: "" },
+        { type: "cta", x: 250,y: 390, w: 480, h: 90, title: "Get 30% Off", sub: "" },
+      ]),
+    ];
 
-newStyleBtn && newStyleBtn.addEventListener("click", ()=>{
-  // cycle the style dropdown if present
-  const opts = Array.from(styleSel.options);
-  const ix = Math.max(0, opts.findIndex(o=>o.selected));
-  const next = opts[(ix+1) % opts.length];
-  next.selected = true;
-  setStatus(`Style: ${styleSel.value}`);
-});
+    for(let i=1;i<=n;i++){
+      const div = document.createElement("div");
+      div.className = "tile";
+      div.tabIndex = 0;
 
-exportBtn && exportBtn.addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify(__lastTemplates, null, 2)], { type:"application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "templify_templates.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setStatus("Exported JSON");
-});
+      const layoutWord = ["Bold","Clean","Modern","Vibrant","Minimal"][i%5];
+      div.innerHTML = `
+        <div class="thumb" aria-hidden="true"></div>
+        <b>${category} #${i}</b>
+        <span>${style} • ${layoutWord} layout • Click to edit</span>
+      `;
 
-// nav buttons (safe)
-btnTemplates && btnTemplates.addEventListener("click", ()=>{ window.scrollTo({ top: 0, behavior: "smooth" }); });
-btnAnimate && btnAnimate.addEventListener("click", ()=>{ alert("Animate Studio is coming later (separate module)."); });
+      const elements = patterns[i % patterns.length](i).map(e => ({ id: (globalThis.crypto?.randomUUID?.() || (Math.random().toString(16).slice(2) + Date.now().toString(16))), ...e }));
 
-// init theme + initial seeds
-(function init(){
+      const thumb = div.querySelector('.thumb');
+      if(thumb){
+        drawThumb(thumb, elements);
+      }
+
+      const template = {
+        id: `seed_${Date.now()}_${i}`,
+        title: `${category} #${i}`,
+        description: `${style} • ${layoutWord} layout`,
+        category,
+        style,
+        canvas: { w: 980, h: 620 },
+        elements
+      };
+      __lastTemplates.push(template);
+
+      div.addEventListener("click", ()=>openEditorWith(template));
+      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(template); });
+      grid.appendChild(div);
+    }
+  }
+
+  function openEditorWith(payload){
+    // payload can be {cat,style,i} OR a full template object
+    const cat = payload?.category || payload?.cat || $("#cat").value;
+    const style = payload?.style || $("#style").value;
+
+    // Store draft so editor can load a REAL template (elements/positions)
+    localStorage.setItem("templify_draft", JSON.stringify({
+      meta: {
+        cat,
+        style,
+        i: payload?.i || 1,
+        prompt: $("#prompt").value.trim(),
+        notes: $("#notes").value.trim(),
+        title: payload?.title || null,
+        description: payload?.description || payload?.subtitle || null,
+      },
+      template: payload?.elements ? payload : null,
+      createdAt: Date.now()
+    }));
+    window.location.href = "editor.html";
+  }
+
+  // Keep latest generated templates (for tile click -> editor)
+  let __lastTemplates = [];
+
+  $("#openEditor").addEventListener("click", ()=>openEditorWith({cat:$("#cat").value, style:$("#style").value, i:1}));
+  $("#themeBtn").addEventListener("click", toggleTheme);
+
+  $("#exportBtn").addEventListener("click", ()=>{
+    const items = [...grid.children].map((el, idx)=>({
+      title: el.querySelector("b")?.textContent || `Template #${idx+1}`,
+      desc: el.querySelector("span")?.textContent || ""
+    }));
+    const blob = new Blob([JSON.stringify({items}, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "templify_templates.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // restore theme + initial previews
   const saved = localStorage.getItem("templify_theme");
-  setTheme(saved || "dark");
+  if(saved==="light"||saved==="dark") setTheme(saved);
+  seedTemplates(12);
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("generateBtn");
+  if (!btn) {
+    alert("Generate button not found. UI mismatch.");
+    return;
+  }
 
-  const category = catSel?.value || "Instagram Post";
-  const style = styleSel?.value || "Dark Premium";
-  const count = clamp(safeInt(countInp?.value, 24), 1, 200);
+  btn.addEventListener("click", async (event) => {
+currentLayout = "Modern";
+currentStyle = "Dark Premium";
 
-  // if last templates exist, show them; otherwise seeds
-  try{
-    const last = JSON.parse(localStorage.getItem("templify_last_templates")||"null");
-    if(Array.isArray(last) && last.length){
-      renderGrid(last, { category, style });
-      setStatus(`Loaded ${last.length} templates`);
-      return;
+    const payload = {
+      category: document.getElementById("cat")?.value || "Instagram Post",
+      style: document.getElementById("style")?.value || "Dark Premium",
+      count: parseInt(document.getElementById("count")?.value || "10", 10),
+      prompt: document.getElementById("prompt")?.value || "",
+      notes: document.getElementById("notes")?.value || ""
+    };
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      console.log("AI RESPONSE:", data);
+
+      // ✅ MINIMAL FIX: connect AI result to the existing renderer
+      // Render AI templates into the grid
+      const templates = Array.isArray(data?.templates) ? data.templates : [];
+      grid.innerHTML = "";
+      const cat = payload.category;
+      const style = payload.style;
+
+      // Normalize templates to our editor-friendly schema
+      const normalized = (templates.length ? templates : []).map((t, i) => {
+        const elements = Array.isArray(t.elements) ? t.elements : [];
+        return {
+          id: t.id || `ai_${Date.now()}_${i+1}`,
+          title: t.title || `${cat} #${i+1}`,
+          description: t.description || t.subtitle || `${style} • AI generated`,
+          category: t.category || payload.category || cat,
+          style: t.style || payload.style || style,
+          canvas: t.canvas || { w: 980, h: 620 },
+          elements: elements.map(e => ({
+            id: e.id || (globalThis.crypto?.randomUUID?.() || (Math.random().toString(16).slice(2) + Date.now().toString(16))),
+            type: String(e.type ?? "card"),
+            x: Number(e.x ?? 80), y: Number(e.y ?? 80),
+            w: Number(e.w ?? e.width ?? 420), h: Number(e.h ?? e.height ?? 120),
+            title: String(e.title ?? e.text ?? (String(e.type??"").toLowerCase()==="image" ? "IMAGE" : "TEXT")),
+            sub: String(e.sub ?? e.caption ?? ""),
+            fontSize: (e.fontSize ?? null),
+            fontWeight: (e.fontWeight ?? null),
+            color: (e.color ?? null),
+            align: (e.align ?? null),
+            radius: (e.radius ?? null),
+            fill: (e.fill ?? null),
+            background: (e.background ?? null),
+            opacity: (e.opacity ?? null)
+          }))
+        };
+      });
+
+      // If AI returned nothing usable, fall back to seeded "real" templates
+      if(!normalized.length){
+        seedTemplates(payload.count);
+        statusEl.textContent = `Generated ${payload.count}`;
+        return;
+      }
+
+      __lastTemplates = normalized;
+      grid.innerHTML = "";
+
+      __lastTemplates.forEach((t) => {
+        const div = document.createElement("div");
+        div.className = "tile";
+        div.tabIndex = 0;
+        div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${t.title}</b><span>${t.description}</span>`;
+
+      const thumb = div.querySelector('.thumb');
+      if(thumb){
+        drawThumb(thumb, t.elements, t.bg);
+      }
+
+        div.addEventListener("click", ()=>openEditorWith(t));
+        div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
+        grid.appendChild(div);
+      });
+
+      statusEl.textContent = `Generated ${__lastTemplates.length}`;
+    } catch (e) {
+      // ✅ Fallback: never leave user with "nothing happened"
+      seedTemplates(payload.count);
     }
-  }catch(e){}
-  renderGrid(makeSeedTemplates({ count, category, style }), { category, style });
-  setStatus("Ready");
-})();
+  });
+});
+</script>
+<script>
+  document.getElementById("btnTemplates")?.addEventListener("click", () => {
+    alert("Templates Library– coming soon");
+  });
+
+  document.getElementById("btnAnimate")?.addEventListener("click", () => {
+    alert("Animate – coming soon");
+  });
+</script>
+
+<script type="module">
+// Nexora: New Layout + New Style (SAFE)
+// UI unchanged. Only updates the preview tile text.
+
+const layouts = ["Bold","Clean","Modern","Minimal","Vibrant"];
+const styles  = ["Dark Premium","Light Minimal","Neon","Glassmorphism","Corporate"];
+
+const grid = document.getElementById("previewGrid");
+const statusEl = document.getElementById("status");
+
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function setStatus(msg){ if(statusEl) statusEl.textContent = msg; }
+
+function updateTilesText({layout=null, style=null}={}){
+  if(!grid) return;
+  const tiles = Array.from(grid.querySelectorAll(".tile"));
+  tiles.forEach((tile) => {
+    const span = tile.querySelector("span");
+    if(!span) return;
+    const curStyle = style || (document.getElementById("style")?.value) || "Dark Premium";
+    const curLayout = layout || span.textContent.match(/\b(Bold|Clean|Modern|Minimal|Vibrant)\b/)?.[0] || "Modern";
+    span.textContent = `${curStyle} • ${curLayout} layout • Click to edit`;
+  });
+}
+
+document.getElementById("newLayoutBtn")?.addEventListener("click", () => {
+  updateTilesText({ layout: pick(layouts) });
+  setStatus("New layout applied");
+});
+
+document.getElementById("newStyleBtn")?.addEventListener("click", () => {
+  const s = pick(styles);
+  const sel = document.getElementById("style");
+  if(sel){
+    const opt = Array.from(sel.options).find(o => o.textContent.trim() === s);
+    if(opt) sel.value = opt.textContent.trim();
+  }
+  updateTilesText({ style: s });
+  setStatus("New style applied");
+});
 
 </script>
 
+
+<script>
+function renderPreview(canvas, t){
+  if(!canvas) return;
+  canvas.innerHTML="";
+  if(t.bg) canvas.style.background=t.bg;
+  const texts=(t.elements||[]).filter(e=>e.type==="heading"||e.type==="text").slice(0,2);
+  texts.forEach((e,i)=>{
+    const d=document.createElement("div");
+    d.className="pv-text";
+    d.textContent=e.title||"";
+    d.style.top=(14+i*32)+"px";
+    d.style.fontSize=(i===0?16:12)+"px";
+    d.style.color=e.color||"#fff";
+    canvas.appendChild(d);
+  });
+}
+</script>
 
 </body>
 </html>
