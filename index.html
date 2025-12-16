@@ -533,27 +533,37 @@
 
     // Simple "real" layouts for the editor (cards on canvas)
     const patterns = [
-      // Hero + CTA
-      (i)=> ([
-        { type: "background", x:0,y:0,w:980,h:620, title:"BG", sub:"", fill:"linear-gradient(135deg,#0b5fff,#7b5cff)" },
-        { type: "heading", x: 80, y: 70,  w: 820, h: 120, title: "Grow Your Brand", sub: "", fontSize: 72, fontWeight: 800, color:"#ffffff" },
-        { type: "text", x: 80, y: 210, w: 620, h: 110, title: "",  sub: "Premium design with clear hierarchy and focus." },
-        { type: "cta", x: 80, y: 350, w: 360, h: 110, title: "Shop Now", sub: "" },
-        { type: "image", x: 520,y: 260, w: 380, h: 300, title: "", sub: "" },
-      ]),
-      // Split left text / right image
-      (i)=> ([
-        { type: "heading", x: 70, y: 80,  w: 420, h: 150, title: "New Collection", sub: "" },
-        { type: "text", x: 70, y: 250, w: 420, h: 170, title: "",  sub: "• Premium quality\n• Fast delivery\n• Limited offer" },
-        { type: "image", x: 520,y: 80,  w: 390, h: 360, title: "", sub: "" },
-      ]),
-      // Badge + centered headline
-      (i)=> ([
-        { type: "badge", x: 320,y: 70,  w: 320, h: 70,  title: "LIMITED", sub: "" },
-        { type: "heading", x: 160,y: 190, w: 660, h: 150, title: "Flash Sale", sub: "" },
-        { type: "cta", x: 250,y: 390, w: 480, h: 90, title: "Get 30% Off", sub: "" },
-      ]),
-    ];
+  // Instagram Post (Square)
+  { name:"Bold Promo", vibe:"Modern", layout:"split", accent:"badge" },
+  { name:"Minimal Quote", vibe:"Clean", layout:"center", accent:"line" },
+  { name:"Product Highlight", vibe:"Vibrant", layout:"imageRight", accent:"pill" },
+
+  // YouTube Thumbnail (16:9)
+  { name:"Big Face + Text", vibe:"High Contrast", layout:"ytFace", accent:"stroke" },
+  { name:"Tech Review", vibe:"Neon", layout:"ytTech", accent:"glow" },
+
+  // Flyer / Poster (Portrait)
+  { name:"Event Flyer", vibe:"Premium", layout:"flyerHero", accent:"tag" },
+  { name:"Business Flyer", vibe:"Corporate", layout:"flyerSplit", accent:"curve" },
+
+  // Business Card
+  { name:"Classic Card", vibe:"Elegant", layout:"cardClassic", accent:"bar" },
+  { name:"Modern Card", vibe:"Minimal", layout:"cardModern", accent:"dot" },
+
+  // Logo
+  { name:"Monogram", vibe:"Luxury", layout:"logoMono", accent:"ring" },
+  { name:"Abstract Mark", vibe:"Tech", layout:"logoAbstract", accent:"gradient" },
+
+  // Presentation Slide
+  { name:"Pitch Slide", vibe:"Clean", layout:"slideSplit", accent:"footer" },
+  { name:"Title Slide", vibe:"Bold", layout:"slideTitle", accent:"shape" },
+
+  // Resume
+  { name:"Resume Modern", vibe:"Professional", layout:"resumeModern", accent:"sidebar" },
+
+  // Story (9:16)
+  { name:"Story Promo", vibe:"Trendy", layout:"storyHero", accent:"sticker" }
+];
 
     for(let i=1;i<=n;i++){
       const div = document.createElement("div");
@@ -703,6 +713,13 @@ currentStyle = "Dark Premium";
         };
       });
 
+      // Apply correct canvas sizes + attach rich thumbnail preview specs
+      normalized.forEach((t,i)=>{
+        applyCategoryCanvas(t);
+        t.preview = buildPreviewSpec(t,i,prompt);
+      });
+
+
       // If AI returned nothing usable, fall back to seeded "real" templates
       if(!normalized.length){
         seedTemplates(payload.count);
@@ -792,20 +809,382 @@ document.getElementById("newStyleBtn")?.addEventListener("click", () => {
 
 
 <script>
+// --- Real template thumbnail engine (Phase E: visible Canva-style thumbnails) ---
+const CATEGORY_SIZES = {
+  "Instagram Post": { w:1080, h:1080 },
+  "YouTube Thumbnail": { w:1280, h:720 },
+  "Flyer": { w:1080, h:1350 },
+  "Business Card": { w:1050, h:600 },
+  "Logo": { w:800, h:800 },
+  "Presentation Slide": { w:1920, h:1080 },
+  "Resume": { w:1240, h:1754 },
+  "Poster": { w:1080, h:1350 },
+  "Story": { w:1080, h:1920 },
+  "TikTok": { w:1080, h:1920 } // if you add it later
+};
+
+function pickPalette(style, i){
+  // deterministic palettes to make each template look clearly different
+  const sets = [
+    ["#0b1020","#101b3a","#2b6cff","#7cf6ff","#ffffff"],
+    ["#0b0f1a","#1b1033","#ff3d6e","#ffd36b","#ffffff"],
+    ["#071017","#0c2530","#22c55e","#a7f3d0","#ffffff"],
+    ["#0d0b12","#22122c","#a855f7","#f0abfc","#ffffff"],
+    ["#0b0c10","#162033","#f59e0b","#fde68a","#ffffff"],
+    ["#070a12","#121a2a","#60a5fa","#93c5fd","#ffffff"],
+  ];
+  const s = (String(style||"") + "|" + i);
+  let h=0; for(let k=0;k<s.length;k++) h = (h*31 + s.charCodeAt(k))>>>0;
+  const p = sets[h % sets.length];
+  return { bg1:p[0], bg2:p[1], accent:p[2], accent2:p[3], text:p[4] };
+}
+
+function safeHeadline(text){
+  const t = String(text||"").trim();
+  if(!t) return "New Collection";
+  // shorten long prompts to a headline-like chunk
+  const cleaned = t.replace(/\s+/g," ").replace(/[\r\n]+/g," ").slice(0,64);
+  return cleaned.length > 34 ? cleaned.slice(0,32).trim()+"…" : cleaned;
+}
+
+function buildPreviewSpec(t, i, prompt){
+  const cat = t.category || "Instagram Post";
+  const pal = pickPalette(t.style || t.subtitle || "Dark Premium", i);
+  const headline = safeHeadline(t.title || prompt || "New Collection");
+  const sub = (t.subtitle || t.style || "Dark Premium");
+  const variant = (i % 6);
+
+  // per-category layout choices (kept simple but clearly different)
+  const layouts = {
+    "Instagram Post": ["split","centerBadge","imageTop","diagonal","card","stack"],
+    "YouTube Thumbnail": ["ytFace","ytBigText","ytSplit","ytBanner","ytBox","ytNeon"],
+    "Flyer": ["flyerHero","flyerSplit","flyerCurve","flyerGrid","flyerPhoto","flyerPoster"],
+    "Poster": ["posterHex","posterSplit","posterCurve","posterGrid","posterPhoto","posterMinimal"],
+    "Business Card": ["cardClassic","cardModern","cardDark","cardStrip","cardLeft","cardMono"],
+    "Logo": ["logoMono","logoAbstract","logoRing","logoTech","logoBadge","logoMark"],
+    "Presentation Slide": ["slideSplit","slideTitle","slideAgenda","slideStats","slideQuote","slideSection"],
+    "Resume": ["resumeModern","resumeSidebar","resumeMinimal","resumeTwoCol","resumeClean","resumePro"],
+    "Story": ["storyHero","storySplit","storySticker","storyQuote","storyNeon","storyMinimal"]
+  };
+
+  const layout = (layouts[cat] ? layouts[cat][variant] : layouts["Instagram Post"][variant]) || "split";
+
+  // spec is only for thumbnail rendering (does not affect editor yet)
+  return {
+    cat,
+    layout,
+    pal,
+    headline,
+    sub,
+    cta: (["Shop Now","Get Started","Join Now","Learn More","Start Today","Download"][variant]),
+    badge: (["LIMITED","NEW","PRO","HOT","2025","TREND"][variant]),
+    price: (["30% OFF","$19/mo","FREE","New Drop","Limited Seats","Pro Pack"][variant])
+  };
+}
+
+function applyCategoryCanvas(t){
+  const s = CATEGORY_SIZES[t.category];
+  if(!s) return t;
+  // keep existing canvas if already correct; otherwise overwrite for correct aspect
+  if(!t.canvas || !t.canvas.w || !t.canvas.h || (t.canvas.w===980 && t.canvas.h===620)){
+    t.canvas = { w:s.w, h:s.h };
+  }
+  return t;
+}
+
 function renderPreview(canvas, t){
-  if(!canvas) return;
-  canvas.innerHTML="";
-  if(t.bg) canvas.style.background=t.bg;
-  const texts=(t.elements||[]).filter(e=>e.type==="heading"||e.type==="text").slice(0,2);
-  texts.forEach((e,i)=>{
-    const d=document.createElement("div");
-    d.className="pv-text";
-    d.textContent=e.title||"";
-    d.style.top=(14+i*32)+"px";
-    d.style.fontSize=(i===0?16:12)+"px";
-    d.style.color=e.color||"#fff";
-    canvas.appendChild(d);
-  });
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const p = t.preview || buildPreviewSpec(t, 0, "");
+  const pal = p.pal || pickPalette(t.style || t.subtitle || "Dark Premium", 0);
+
+  // Background
+  const g = ctx.createLinearGradient(0,0,W,H);
+  g.addColorStop(0, pal.bg1);
+  g.addColorStop(1, pal.bg2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // Soft vignette
+  const vg = ctx.createRadialGradient(W*0.2,H*0.2,10, W*0.6,H*0.5, Math.max(W,H));
+  vg.addColorStop(0, "rgba(255,255,255,0.06)");
+  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0,0,W,H);
+
+  // Helpers
+  const rr = (x,y,w,h,r)=>{
+    r=Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  };
+
+  const drawBadge = (x,y,txt)=>{
+    ctx.font = `700 ${Math.max(10, Math.round(W*0.04))}px Poppins,system-ui`;
+    const padX = Math.round(W*0.03), padY = Math.round(H*0.02);
+    const tw = ctx.measureText(txt).width;
+    const bw = tw + padX*2, bh = Math.round(W*0.09);
+    rr(x,y,bw,bh, bh/2);
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    ctx.fill();
+    rr(x,y,bw,bh, bh/2);
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = pal.text;
+    ctx.fillText(txt, x+padX, y+bh-padY);
+  };
+
+  const drawButton = (x,y,txt)=>{
+    ctx.font = `700 ${Math.max(10, Math.round(W*0.045))}px Poppins,system-ui`;
+    const padX = Math.round(W*0.05), padY = Math.round(H*0.03);
+    const tw = ctx.measureText(txt).width;
+    const bw = tw + padX*2, bh = Math.round(W*0.12);
+    rr(x,y,bw,bh, bh/2);
+    ctx.fillStyle = pal.accent;
+    ctx.fill();
+    ctx.fillStyle = "#06101b";
+    ctx.fillText(txt, x+padX, y+bh-padY);
+  };
+
+  const wrapText = (text, x, y, maxW, lineH, maxLines)=>{
+    const words = String(text||"").split(/\s+/).filter(Boolean);
+    let line = "", lines = 0;
+    for(let i=0;i<words.length;i++){
+      const test = line ? (line+" "+words[i]) : words[i];
+      if(ctx.measureText(test).width > maxW && line){
+        ctx.fillText(line, x, y + lines*lineH);
+        lines++; line = words[i];
+        if(lines >= maxLines-1) break;
+      } else {
+        line = test;
+      }
+    }
+    if(lines < maxLines) ctx.fillText(line, x, y + lines*lineH);
+  };
+
+  // Layout primitives (very visible differences)
+  const layout = p.layout || "split";
+  const pad = Math.round(W*0.08);
+  const title = p.headline || "New Collection";
+  const sub = p.sub || "Dark Premium";
+
+  // Decorative accent shapes
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+
+  if(layout.includes("Neon") || layout.includes("glow")){
+    ctx.shadowColor = pal.accent2;
+    ctx.shadowBlur = Math.round(W*0.18);
+  } else {
+    ctx.shadowColor = "rgba(0,0,0,0)";
+    ctx.shadowBlur = 0;
+  }
+
+  // Big accent blob
+  rr(W*0.58, -H*0.18, W*0.55, H*0.55, W*0.2);
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Category-specific compositions
+  if(p.cat === "YouTube Thumbnail"){
+    // Left: big text, Right: face/box
+    rr(pad, pad, W*0.58, H*0.72, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+
+    // "Face" placeholder
+    rr(W*0.68, H*0.18, W*0.26, H*0.62, 22);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fill();
+
+    // Stroke
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W*0.68+2, H*0.18+2, W*0.26-4, H*0.62-4);
+
+    // Text
+    ctx.fillStyle = pal.text;
+    ctx.font = `800 ${Math.round(W*0.11)}px Poppins,system-ui`;
+    wrapText(title.toUpperCase(), pad+Math.round(W*0.04), pad+Math.round(H*0.24), W*0.50, Math.round(W*0.12), 2);
+
+    ctx.font = `600 ${Math.round(W*0.05)}px Poppins,system-ui`;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    wrapText(sub, pad+Math.round(W*0.04), pad+Math.round(H*0.50), W*0.50, Math.round(W*0.06), 2);
+
+    drawBadge(pad+Math.round(W*0.04), H*0.72, p.badge || "NEW");
+  }
+  else if(p.cat === "Business Card"){
+    // Card base
+    rr(pad*0.8, pad*0.8, W-pad*1.6, H-pad*1.6, 22);
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    ctx.fill();
+    // Accent bar
+    ctx.fillStyle = pal.accent;
+    rr(pad*0.8, H-pad*1.1, W-pad*1.6, pad*0.35, 18);
+    ctx.fill();
+    // Logo mark
+    rr(pad*1.1, pad*1.1, W*0.16, W*0.16, W*0.08);
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    ctx.fill();
+    // Name + title
+    ctx.fillStyle = pal.text;
+    ctx.font = `800 ${Math.round(W*0.08)}px Poppins,system-ui`;
+    ctx.fillText(title.slice(0,14), pad*1.1, H*0.45);
+    ctx.font = `600 ${Math.round(W*0.04)}px Poppins,system-ui`;
+    ctx.fillStyle = "rgba(255,255,255,0.80)";
+    ctx.fillText("Creative Studio", pad*1.1, H*0.55);
+    // Contact lines
+    ctx.fillStyle = "rgba(255,255,255,0.70)";
+    ctx.font = `500 ${Math.round(W*0.035)}px Poppins,system-ui`;
+    ctx.fillText("hello@nexora.app", pad*1.1, H*0.70);
+    ctx.fillText("+92 300 000 0000", pad*1.1, H*0.80);
+  }
+  else if(p.cat === "Logo"){
+    // Logo mark + word
+    rr(W*0.18, H*0.18, W*0.64, H*0.64, 28);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+    ctx.save();
+    ctx.translate(W*0.5, H*0.46);
+    ctx.rotate(-0.15);
+    rr(-W*0.18, -W*0.18, W*0.36, W*0.36, W*0.12);
+    ctx.fillStyle = pal.accent;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = pal.text;
+    ctx.font = `900 ${Math.round(W*0.12)}px Poppins,system-ui`;
+    ctx.textAlign = "center";
+    ctx.fillText((title.split(" ")[0]||"NEXORA").toUpperCase(), W*0.5, H*0.83);
+    ctx.textAlign = "left";
+  }
+  else if(p.cat === "Presentation Slide"){
+    // Split slide
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    rr(pad, pad, W-pad*2, H-pad*2, 18);
+    ctx.fill();
+    // Left content
+    ctx.fillStyle = pal.text;
+    ctx.font = `900 ${Math.round(W*0.07)}px Poppins,system-ui`;
+    wrapText(title, pad+Math.round(W*0.04), pad+Math.round(H*0.18), W*0.52, Math.round(W*0.08), 2);
+    ctx.font = `600 ${Math.round(W*0.035)}px Poppins,system-ui`;
+    ctx.fillStyle = "rgba(255,255,255,0.80)";
+    ctx.fillText("• Key point 1", pad+Math.round(W*0.04), H*0.52);
+    ctx.fillText("• Key point 2", pad+Math.round(W*0.04), H*0.60);
+    ctx.fillText("• Key point 3", pad+Math.round(W*0.04), H*0.68);
+    // Right visual
+    rr(W*0.66, H*0.22, W*0.26, H*0.56, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fill();
+    // Footer
+    ctx.fillStyle = pal.accent;
+    rr(pad, H-pad*1.1, W-pad*2, pad*0.35, 14);
+    ctx.fill();
+  }
+  else if(p.cat === "Resume"){
+    // Resume: left sidebar + sections
+    rr(pad, pad, W-pad*2, H-pad*2, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+    rr(pad, pad, W*0.26, H-pad*2, 18);
+    ctx.fillStyle = pal.accent;
+    ctx.globalAlpha = 0.22;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = pal.text;
+    ctx.font = `900 ${Math.round(W*0.055)}px Poppins,system-ui`;
+    ctx.fillText(title.split(" ")[0] || "Hassan", pad+Math.round(W*0.03), pad+Math.round(H*0.16));
+    ctx.font = `600 ${Math.round(W*0.03)}px Poppins,system-ui`;
+    ctx.fillStyle = "rgba(255,255,255,0.80)";
+    ctx.fillText("Product Designer", pad+Math.round(W*0.03), pad+Math.round(H*0.23));
+    // Right blocks
+    const bx = W*0.34, bw = W*0.58;
+    const blk = (y)=>{
+      rr(bx, y, bw, H*0.10, 14);
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fill();
+    };
+    blk(H*0.30); blk(H*0.44); blk(H*0.58); blk(H*0.72);
+  }
+  else if(p.cat === "Story"){
+    // Story: big hero + sticker + CTA
+    rr(pad, pad, W-pad*2, H-pad*2, 22);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+    rr(pad*1.2, pad*1.2, W-pad*2.4, H*0.56, 24);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fill();
+    drawBadge(pad*1.2, H*0.62, p.badge || "TREND");
+    ctx.fillStyle = pal.text;
+    ctx.font = `900 ${Math.round(W*0.10)}px Poppins,system-ui`;
+    wrapText(title, pad*1.2, H*0.72, W-pad*2.4, Math.round(W*0.11), 2);
+    drawButton(pad*1.2, H*0.86, p.cta || "Swipe Up");
+  }
+  else if(p.cat === "Flyer" || p.cat === "Poster"){
+    // Flyer/Poster: photo left, details right
+    rr(pad, pad, W-pad*2, H-pad*2, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+    rr(pad*1.1, pad*1.1, W*0.46, H-pad*2.2, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fill();
+    rr(W*0.58, pad*1.1, W*0.34, H*0.18, 16);
+    ctx.fillStyle = pal.accent;
+    ctx.globalAlpha = 0.22;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = pal.text;
+    ctx.font = `900 ${Math.round(W*0.075)}px Poppins,system-ui`;
+    wrapText(title, W*0.58, H*0.40, W*0.34, Math.round(W*0.085), 3);
+    ctx.fillStyle = "rgba(255,255,255,0.80)";
+    ctx.font = `600 ${Math.round(W*0.035)}px Poppins,system-ui`;
+    ctx.fillText("• Services • Pricing • Contact", W*0.58, H*0.66);
+    drawButton(W*0.58, H*0.74, p.cta || "Get Started");
+    drawBadge(pad*1.1, pad*1.1, p.badge || "NEW");
+  }
+  else {
+    // Instagram Post default
+    rr(pad, pad, W-pad*2, H-pad*2, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+
+    if(layout === "centerBadge"){
+      drawBadge(pad*1.1, pad*1.1, p.badge || "LIMITED");
+      ctx.fillStyle = pal.text;
+      ctx.font = `900 ${Math.round(W*0.10)}px Poppins,system-ui`;
+      wrapText(title, pad*1.1, H*0.48, W-pad*2.2, Math.round(W*0.11), 2);
+      drawButton(pad*1.1, H*0.74, p.cta || "Shop Now");
+    } else {
+      // image-right
+      rr(W*0.58, H*0.22, W*0.30, H*0.52, 22);
+      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      ctx.fill();
+      ctx.fillStyle = pal.text;
+      ctx.font = `900 ${Math.round(W*0.09)}px Poppins,system-ui`;
+      wrapText(title, pad*1.1, H*0.40, W*0.44, Math.round(W*0.10), 2);
+      ctx.font = `600 ${Math.round(W*0.04)}px Poppins,system-ui`;
+      ctx.fillStyle = "rgba(255,255,255,0.82)";
+      ctx.fillText(sub, pad*1.1, H*0.62);
+      drawButton(pad*1.1, H*0.70, p.cta || "Get Started");
+      drawBadge(pad*1.1, pad*1.1, p.badge || "NEW");
+    }
+  }
+
+  // subtle border
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5,0.5,W-1,H-1);
 }
 </script>
 
