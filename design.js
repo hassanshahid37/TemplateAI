@@ -34,3 +34,4 @@ export function generateTemplates(count = 24) {
         {
           type: "text",
           text: "Premium social media design with strong hierarchy and clear focus.",
+
