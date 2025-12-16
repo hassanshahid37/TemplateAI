@@ -1,117 +1,125 @@
-// Nexora / design.js
-// Phase C — Category-based Real Template Engine (v1)
+// design.js — Canva-level Layout Intelligence Upgrade
+// SAFE: UI-agnostic, preview-agnostic, editor-compatible
 
-export function generateTemplates(count = 36, category = "All") {
-  const engines = {
-    Instagram: instagramTemplates,
-    Story: storyTemplates,
-    YouTube: youtubeTemplates,
-    Flyer: flyerTemplates,
-    Poster: posterTemplates,
-    Presentation: presentationTemplates,
-    BusinessCard: businessCardTemplates,
-    Resume: resumeTemplates,
-    Logo: logoTemplates
-  };
+export function generateTemplates(count = 24) {
+  const layouts = [
+    heroLeftImageRight,
+    fullBleedImageOverlay,
+    minimalTypography,
+    badgePromo,
+    editorialAnnouncement
+  ];
 
-  let pool = [];
-  if (category === "All") {
-    Object.values(engines).forEach(fn => pool.push(...fn()));
-  } else if (engines[category]) {
-    pool = engines[category]();
+  const palettes = [
+    { bg: "#0b1220", primary: "#ffffff", accent: "#4f8cff", muted: "#aab0bd" },
+    { bg: "#052016", primary: "#eafff4", accent: "#22c55e", muted: "#7dd3a7" },
+    { bg: "#1f1409", primary: "#fff7ed", accent: "#f59e0b", muted: "#fdba74" },
+    { bg: "#1b0f17", primary: "#fde7f3", accent: "#ec4899", muted: "#f9a8d4" },
+    { bg: "#0f1a17", primary: "#ecfeff", accent: "#06b6d4", muted: "#67e8f9" }
+  ];
+
+  const templates = [];
+
+  for (let i = 0; i < count; i++) {
+    const layout = layouts[i % layouts.length];
+    const palette = palettes[i % palettes.length];
+    templates.push(layout(i, palette));
   }
-  return pool.slice(0, count);
+
+  return templates;
 }
 
-function tpl(title, w, h, bg, elements, meta = {}) {
-  return { title, category: meta.category || "General", canvas:{width:w,height:h,background:bg}, elements };
+/* ---------- LAYOUT ARCHETYPES ---------- */
+
+function heroLeftImageRight(i, p) {
+  return {
+    title: `Hero Brand #${i + 1}`,
+    canvas: { width: 1080, height: 1080, background: p.bg },
+    elements: [
+      heading("Grow Your Brand", 90, 140, 520, 96, p.primary),
+      text("Premium design built to convert", 90, 270, 460, 34, p.muted),
+      cta("Shop Now", 90, 360, p.accent),
+      image(600, 120, 380, 840)
+    ]
+  };
 }
 
-function h(text,x,y,w,size,align="left"){return{type:"heading",text,x,y,width:w,fontSize:size,fontWeight:800,color:"#fff",align};}
-function t(text,x,y,w,size){return{type:"text",text,x,y,width:w,fontSize:size,fontWeight:500,color:"rgba(255,255,255,.9)"};}
-function img(x,y,w,h,r=24){return{type:"image",x,y,width:w,height:h,radius:r};}
-function shape(x,y,w,h,c,r=24){return{type:"shape",x,y,width:w,height:h,fill:c,radius:r};}
-function btn(text,x,y){return{type:"button",text,x,y,width:240,height:60,background:"#0b5fff",color:"#fff",radius:999,fontSize:16,fontWeight:700};}
-
-/* INSTAGRAM */
-function instagramTemplates(){
-  return [tpl("Instagram Promo",1080,1080,"linear-gradient(135deg,#0b5fff,#7b5cff)",[
-    h("New Collection",120,260,840,92,"center"),
-    t("Minimal • Bold • Modern",320,380,440,26),
-    img(240,460,600,420),
-    btn("Shop Now",420,920)
-  ],{category:"Instagram"})];
+function fullBleedImageOverlay(i, p) {
+  return {
+    title: `Visual Impact #${i + 1}`,
+    canvas: { width: 1080, height: 1080, background: p.bg },
+    elements: [
+      image(0, 0, 1080, 1080),
+      overlay(0.45),
+      heading("Discover the Moment", 120, 420, 840, 88, p.primary, "center"),
+      text("Bold visuals. Clear message.", 120, 520, 840, 30, p.muted, "center")
+    ]
+  };
 }
 
-/* STORY */
-function storyTemplates(){
-  return [tpl("Story Promo",1080,1920,"linear-gradient(180deg,#0b5fff,#000)",[
-    h("Limited Offer",120,420,840,96,"center"),
-    img(140,620,800,900),
-    btn("Swipe Up",420,1580)
-  ],{category:"Story"})];
+function minimalTypography(i, p) {
+  return {
+    title: `Minimal Type #${i + 1}`,
+    canvas: { width: 1080, height: 1080, background: p.bg },
+    elements: [
+      heading("Midnight Thoughts", 140, 420, 800, 104, p.primary),
+      text("A calm, modern statement.", 140, 560, 600, 32, p.muted)
+    ]
+  };
 }
 
-/* YOUTUBE */
-function youtubeTemplates(){
-  return [tpl("YouTube Thumbnail",1280,720,"linear-gradient(135deg,#ff4d6d,#0b1020)",[
-    img(760,120,420,480),
-    h("You Won’t Believe This",60,260,640,86)
-  ],{category:"YouTube"})];
+function badgePromo(i, p) {
+  return {
+    title: `Limited Offer #${i + 1}`,
+    canvas: { width: 1080, height: 1080, background: p.bg },
+    elements: [
+      badge("LIMITED", 90, 90, p.accent),
+      heading("Flash Sale", 90, 200, 720, 96, p.primary),
+      cta("Get 30% Off", 90, 320, p.accent),
+      image(90, 420, 900, 500)
+    ]
+  };
 }
 
-/* FLYER */
-function flyerTemplates(){
-  return [tpl("Business Flyer",1080,1350,"linear-gradient(180deg,#0b1020,#000)",[
-    img(120,120,840,420),
-    h("Creative Agency",120,580,840,86,"center"),
-    t("Branding • Marketing • Design",240,700,600,26),
-    btn("Contact Us",420,860)
-  ],{category:"Flyer"})];
+function editorialAnnouncement(i, p) {
+  return {
+    title: `Editorial #${i + 1}`,
+    canvas: { width: 1080, height: 1080, background: p.bg },
+    elements: [
+      heading("Celebrate in Style", 120, 180, 840, 88, p.primary, "center"),
+      divider(120, 300, 840),
+      text("Join us for an exclusive event", 120, 340, 840, 32, p.muted, "center"),
+      cta("Reserve Spot", 420, 420, p.accent)
+    ]
+  };
 }
 
-/* POSTER */
-function posterTemplates(){
-  return [tpl("Marketing Poster",1080,1600,"linear-gradient(180deg,#111,#222)",[
-    img(120,140,840,520),
-    h("Grow Your Business",120,720,840,92,"center"),
-    t("Strategy • Ads • Design",300,850,480,26),
-    btn("Get Started",420,980)
-  ],{category:"Poster"})];
+/* ---------- ELEMENT HELPERS ---------- */
+
+function heading(text, x, y, width, size, color, align = "left") {
+  return { type: "heading", text, x, y, width, fontSize: size, fontWeight: 700, color, align };
 }
 
-/* PRESENTATION */
-function presentationTemplates(){
-  return [tpl("Presentation Slide",1600,900,"linear-gradient(135deg,#0b5fff,#07130f)",[
-    h("Company Overview",80,260,720,88),
-    t("Mission • Vision • Growth",80,380,640,26),
-    img(880,220,560,420)
-  ],{category:"Presentation"})];
+function text(text, x, y, width, size, color, align = "left") {
+  return { type: "text", text, x, y, width, fontSize: size, fontWeight: 400, color, align };
 }
 
-/* BUSINESS CARD */
-function businessCardTemplates(){
-  return [tpl("Business Card",1050,600,"linear-gradient(135deg,#000,#333)",[
-    h("Alex Johnson",60,200,600,52),
-    t("Creative Director",60,270,600,22),
-    t("alex@nexora.ai",60,340,600,22)
-  ],{category:"BusinessCard"})];
+function cta(text, x, y, color) {
+  return { type: "button", text, x, y, width: 280, height: 64, background: color, color: "#fff", radius: 999 };
 }
 
-/* RESUME */
-function resumeTemplates(){
-  return [tpl("Resume",1080,1400,"#f4f4f4",[
-    shape(0,0,360,1400,"#0b5fff",0),
-    h("Alex Johnson",400,140,600,72),
-    t("Product Designer",400,230,600,26),
-    h("Experience",400,360,600,48),
-    t("• Senior Designer at Studio",400,430,600,24)
-  ],{category:"Resume"})];
+function image(x, y, w, h) {
+  return { type: "image", x, y, width: w, height: h };
 }
 
-/* LOGO */
-function logoTemplates(){
-  return [tpl("Logo Mark",800,800,"linear-gradient(135deg,#0b5fff,#7b5cff)",[
-    h("N",260,260,280,240,"center")
-  ],{category:"Logo"})];
+function badge(text, x, y, color) {
+  return { type: "badge", text, x, y, background: color, color: "#fff" };
+}
+
+function divider(x, y, w) {
+  return { type: "divider", x, y, width: w, height: 2, color: "rgba(255,255,255,.2)" };
+}
+
+function overlay(opacity) {
+  return { type: "overlay", opacity };
 }
