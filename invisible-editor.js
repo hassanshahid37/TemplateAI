@@ -1,37 +1,72 @@
+// invisible-editor.js — Phase I → J bridge (safe, non-destructive)
+// Purpose: keep generator + editor in sync via localStorage keys and lightweight helpers.
+// Does NOT touch UI/CSS and does NOT depend on any particular renderer.
 
-// invisible-editor.js — Phase G1
-// Generator-side invisible editor (data-driven, no UI)
-
-(function () {
+(() => {
   if (window.__NEXORA_INVISIBLE_EDITOR__) return;
   window.__NEXORA_INVISIBLE_EDITOR__ = true;
 
-  window.NEXORA_TEMPLATES = window.NEXORA_TEMPLATES || [];
+  const safeParse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 
-  const originalRender = window.renderTemplates;
-  if (typeof originalRender === "function") {
-    window.renderTemplates = function (templates) {
-      window.NEXORA_TEMPLATES = JSON.parse(JSON.stringify(templates || []));
-      return originalRender.apply(this, arguments);
-    };
+  function getSettings(){
+    return safeParse(localStorage.getItem("nexora_last_settings_v1") || "null");
   }
 
-  window.applyPromptToTemplates = function (prompt) {
-    if (!prompt || !Array.isArray(window.NEXORA_TEMPLATES)) return;
-    window.NEXORA_TEMPLATES.forEach(t => {
-      if (!t.layers) return;
-      t.layers.forEach(l => {
-        if (l.type === "text" && l.role === "headline") {
-          l.text = prompt.slice(0, 80);
-        }
-      });
-    });
+  function setSettings(partial){
+    const prev = getSettings() || {};
+    const next = { ...prev, ...partial, savedAt: Date.now() };
+    try{ localStorage.setItem("nexora_last_settings_v1", JSON.stringify(next)); }catch(e){}
+    return next;
+  }
+
+  function setSelectedTemplate(tpl){
+    try{
+      if(tpl) localStorage.setItem("nexora_selected_template_v1", JSON.stringify(tpl));
+      else localStorage.removeItem("nexora_selected_template_v1");
+    }catch(e){}
+  }
+
+  function getSelectedTemplate(){
+    return safeParse(localStorage.getItem("nexora_selected_template_v1") || "null");
+  }
+
+  // Expose minimal API
+  window.NEXORA_INVISIBLE = {
+    getSettings,
+    setSettings,
+    setSelectedTemplate,
+    getSelectedTemplate,
+    // Convenience: read the latest generated templates stored by index.html
+    getTemplateForEditor(index){
+      const list = window.NEXORA?.lastTemplates;
+      if(Array.isArray(list) && list[index]) return list[index];
+      return null;
+    }
   };
 
-  window.getTemplateForEditor = function (index) {
-    const t = window.NEXORA_TEMPLATES[index];
-    return t ? JSON.parse(JSON.stringify(t)) : null;
-  };
+  // Optional safety net: if user clicks a tile, ensure selected template is stored.
+  // Index already handles this in openEditorWith, but we keep this as backup.
+  document.addEventListener("click", (ev) => {
+    const tile = ev.target?.closest?.(".tile");
+    if(!tile) return;
+    const parent = tile.parentElement;
+    if(!parent) return;
+    const tiles = Array.from(parent.querySelectorAll(".tile"));
+    const idx = tiles.indexOf(tile);
+    if(idx < 0) return;
 
-  console.log("Phase G1 Invisible Editor loaded");
+    const tpl = window.NEXORA?.lastTemplates?.[idx];
+    if(tpl){
+      setSelectedTemplate(tpl);
+      // Try to capture current form fields if present
+      const prompt = document.getElementById("prompt")?.value?.trim?.() || "";
+      const notes  = document.getElementById("notes")?.value?.trim?.() || "";
+      const cat    = document.getElementById("cat")?.value || tpl.category || "";
+      const style  = document.getElementById("style")?.value || tpl.style || "";
+      const count  = parseInt(document.getElementById("count")?.value || "24", 10) || 24;
+      setSettings({ prompt, notes, category: cat, style, count });
+    }
+  }, true);
+
+  console.log("[Nexora] Invisible Editor bridge ready");
 })();
