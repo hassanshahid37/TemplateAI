@@ -629,6 +629,25 @@
     const cat = payload?.category || payload?.cat || $("#cat").value;
     const style = payload?.style || $("#style").value;
 
+    // Phase I → J bridge: save generator settings + selected template for Editor (new keys)
+    try{
+      localStorage.setItem("nexora_last_settings_v1", JSON.stringify({
+        category: cat,
+        style,
+        prompt: $("#prompt").value.trim(),
+        notes: $("#notes").value.trim(),
+        count: parseInt($("#count")?.value || "24", 10) || 24,
+        savedAt: Date.now()
+      }));
+    }catch(e){}
+    try{
+      if(payload?.elements){
+        localStorage.setItem("nexora_selected_template_v1", JSON.stringify(payload));
+      }else{
+        localStorage.removeItem("nexora_selected_template_v1");
+      }
+    }catch(e){}
+
     // Store draft so editor can load a REAL template (elements/positions)
     localStorage.setItem("templify_draft", JSON.stringify({
       meta: {
