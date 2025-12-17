@@ -1,86 +1,129 @@
 
-// design.js — Phase F v1 (Canva-level visual layouts)
+// design.js — Phase F v2 (Strong hierarchy, Canva-grade)
+// SAFE: drop-in replacement. No UI/API changes.
+
 (function () {
   const Design = {};
 
-  const palettes = [
-    { bg: "#0b1220", card: "#111a2e", ink: "#ffffff", muted: "#aab0bd", accent: "#4f8cff" },
-    { bg: "#071613", card: "#0f2a21", ink: "#eafff4", muted: "#7dd3a7", accent: "#22c55e" },
-    { bg: "#1b0f17", card: "#2a1623", ink: "#fde7f3", muted: "#f9a8d4", accent: "#ec4899" },
-    { bg: "#0f1a17", card: "#132a26", ink: "#ecfeff", muted: "#67e8f9", accent: "#06b6d4" },
-    { bg: "#1f1409", card: "#2a1b0c", ink: "#fff7ed", muted: "#fdba74", accent: "#f59e0b" }
+  // ---------- UTIL ----------
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const hash = (s) => {
+    s = String(s || "");
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0);
+  };
+  const pick = (arr, seed) => arr[seed % arr.length];
+
+  // ---------- PALETTES (premium contrast) ----------
+  const PALETTES = [
+    { bg:"#0b1220", card:"#0f1b36", ink:"#ffffff", muted:"#b7c0d4", accent:"#4f8cff", glow:"rgba(79,140,255,.25)" },
+    { bg:"#071613", card:"#0e2b23", ink:"#eafff4", muted:"#8fe0bf", accent:"#22c55e", glow:"rgba(34,197,94,.25)" },
+    { bg:"#1b0f17", card:"#2a1623", ink:"#fde7f3", muted:"#f3a7cf", accent:"#ec4899", glow:"rgba(236,72,153,.28)" },
+    { bg:"#0f1a17", card:"#132a26", ink:"#ecfeff", muted:"#8de6f0", accent:"#06b6d4", glow:"rgba(6,182,212,.28)" },
+    { bg:"#1f1409", card:"#2a1b0c", ink:"#fff7ed", muted:"#fdc48b", accent:"#f59e0b", glow:"rgba(245,158,11,.28)" }
   ];
 
-  const layouts = [heroCTA, splitPromo, minimalQuote, badgeOffer, editorial];
+  // ---------- LAYOUTS (intent-aware) ----------
+  const LAYOUTS = [heroAnnouncement, productSplit, saleBadge, minimalQuote, editorialCard];
 
   function generateTemplates(opts = {}) {
-    const count = Math.min(Math.max(opts.count || 24, 1), 200);
+    const count = clamp(parseInt(opts.count || 24, 10), 1, 200);
     const category = opts.category || "Instagram Post";
     const style = opts.style || "Dark Premium";
-    const prompt = opts.prompt || "";
-    const templates = [];
+    const prompt = String(opts.prompt || "").trim();
+
+    const seed0 = hash(prompt + category + style);
+    const out = [];
 
     for (let i = 0; i < count; i++) {
-      const palette = palettes[i % palettes.length];
-      const layout = layouts[i % layouts.length];
-      templates.push(layout(i, palette, category, style, prompt));
+      const seed = seed0 + i * 131;
+      const p = pick(PALETTES, seed);
+      const layout = pick(LAYOUTS, seed + 7);
+      out.push(layout(i, p, category, style, prompt, seed));
     }
-    return templates;
+    return out;
   }
 
-  function baseTemplate(title, palette, category, style) {
-    return { title, subtitle: `${style} • Canva-level`, category, palette, elements: [] };
+  // ---------- BASE ----------
+  function base(title, p, category, style) {
+    return {
+      title,
+      subtitle: `${style} • Premium`,
+      category,
+      palette: p,
+      elements: []
+    };
   }
 
-  function heroCTA(i, p, c, s, prompt) {
-    const t = baseTemplate(prompt || "Grow Your Brand", p, c, s);
+  // ---------- ELEMENT HELPERS ----------
+  const bg = (p) => ({ type:"background", fill:p.bg });
+  const card = (x,y,w,h,p) => ({ type:"shape", x,y,width:w,height:h, background:p.card, radius:28, shadow:`0 30px 80px ${p.glow}` });
+  const h1 = (t,x,y,p,align="left") => ({ type:"heading", text:t, x,y, fontSize:68, fontWeight:800, color:p.ink, align });
+  const h2 = (t,x,y,p,align="left") => ({ type:"heading", text:t, x,y, fontSize:42, fontWeight:700, color:p.ink, align });
+  const body = (t,x,y,p,align="left") => ({ type:"text", text:t, x,y, fontSize:24, color:p.muted, align });
+  const cta = (t,x,y,p) => ({ type:"button", text:t, x,y, background:p.accent, color:"#fff", radius:999 });
+  const badge = (t,x,y,p) => ({ type:"badge", text:t, x,y, background:p.accent, color:"#fff" });
+  const divider = (x,y,w=360,p) => ({ type:"divider", x,y, width:w, color:"rgba(255,255,255,.18)" });
+
+  // ---------- LAYOUTS ----------
+  function heroAnnouncement(i,p,c,s,prompt,seed){
+    const headline = prompt || "Introducing a Smarter SaaS";
+    const t = base(headline, p, c, s);
     t.elements = [
-      { type: "background", fill: p.bg },
-      { type: "heading", text: prompt || "Grow Your Brand", x: 70, y: 140, fontSize: 60, color: p.ink },
-      { type: "text", text: "Premium design built to convert", x: 70, y: 240, fontSize: 28, color: p.muted },
-      { type: "button", text: "Get Started", x: 70, y: 320, background: p.accent, color: "#fff" }
+      bg(p),
+      card(70,120,940,520,p),
+      h1(headline,140,200,p),
+      body("Launch announcement • clear value • strong CTA",140,290,p),
+      cta("Get Started",140,360,p)
     ];
     return t;
   }
 
-  function splitPromo(i, p, c, s, prompt) {
-    const t = baseTemplate("New Collection", p, c, s);
+  function productSplit(i,p,c,s,prompt,seed){
+    const t = base("New Feature Release", p, c, s);
     t.elements = [
-      { type: "background", fill: p.bg },
-      { type: "heading", text: "New Collection", x: 60, y: 160, fontSize: 54, color: p.ink },
-      { type: "text", text: prompt || "Modern layouts for brands", x: 60, y: 240, fontSize: 26, color: p.muted },
-      { type: "shape", x: 520, y: 120, width: 420, height: 420, background: p.card }
+      bg(p),
+      card(60,140,480,500,p),
+      h2("New Feature",110,200,p),
+      body(prompt || "Designed to be fast, clean, and scalable.",110,260,p),
+      cta("Explore",110,330,p),
+      card(600,160,360,460,p)
     ];
     return t;
   }
 
-  function minimalQuote(i, p, c, s, prompt) {
-    const t = baseTemplate("Minimal Quote", p, c, s);
+  function saleBadge(i,p,c,s,prompt,seed){
+    const t = base("Limited Time Offer", p, c, s);
     t.elements = [
-      { type: "background", fill: p.bg },
-      { type: "heading", text: prompt || "Design is intelligence made visible.", x: 120, y: 300, fontSize: 52, color: p.ink }
+      bg(p),
+      card(120,140,840,500,p),
+      badge("LIMITED",170,190,p),
+      h1("Flash Sale",170,240,p),
+      body(prompt || "Save big on premium plans today.",170,330,p),
+      cta("Save 30%",170,400,p)
     ];
     return t;
   }
 
-  function badgeOffer(i, p, c, s, prompt) {
-    const t = baseTemplate("Limited Offer", p, c, s);
+  function minimalQuote(i,p,c,s,prompt,seed){
+    const quote = prompt || "Design is intelligence made visible.";
+    const t = base("Minimal Quote", p, c, s);
     t.elements = [
-      { type: "background", fill: p.bg },
-      { type: "badge", text: "LIMITED", x: 80, y: 120, background: p.accent, color: "#fff" },
-      { type: "heading", text: "Flash Sale", x: 80, y: 200, fontSize: 56, color: p.ink },
-      { type: "button", text: "Save 30%", x: 80, y: 300, background: p.accent, color: "#fff" }
+      bg(p),
+      h1(quote,160,360,p)
     ];
     return t;
   }
 
-  function editorial(i, p, c, s, prompt) {
-    const t = baseTemplate("Editorial", p, c, s);
+  function editorialCard(i,p,c,s,prompt,seed){
+    const t = base("Editorial", p, c, s);
     t.elements = [
-      { type: "background", fill: p.bg },
-      { type: "heading", text: "Celebrate in Style", x: 200, y: 200, fontSize: 58, color: p.ink, align: "center" },
-      { type: "divider", x: 200, y: 280 },
-      { type: "text", text: prompt || "A premium announcement layout", x: 200, y: 320, fontSize: 26, color: p.muted, align: "center" }
+      bg(p),
+      card(140,160,800,460,p),
+      h2("Company Update",200,230,p,"center"),
+      divider(360,290,360,p),
+      body(prompt || "A clean editorial layout for announcements.",200,330,p,"center")
     ];
     return t;
   }
@@ -88,3 +131,4 @@
   Design.generateTemplates = generateTemplates;
   window.NexoraDesign = Design;
 })();
+
