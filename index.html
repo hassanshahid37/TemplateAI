@@ -317,876 +317,214 @@
     </main>
   </div>
 
+<script src="design.js"></script>
 <script>
-  const $ = (s)=>document.querySelector(s);
+(function(){
+  const $ = (sel)=>document.querySelector(sel);
+
+  const themeBtn = $("#themeBtn");
+  const openEditorBtn = $("#openEditor");
+  const btnTemplates = $("#btnTemplates");
+  const btnAnimate = $("#btnAnimate");
+
   const grid = $("#previewGrid");
+  const genBtn = $("#generateBtn");
+  const newLayoutBtn = $("#newLayoutBtn");
+  const newStyleBtn = $("#newStyleBtn");
+  const exportBtn = $("#exportBtn");
+  const categorySel = $("#cat");
+  const countInput = $("#count");
+  const styleSel = $("#style");
+  const promptInput = $("#prompt");
+  const notesInput = $("#notes");
   const statusEl = $("#status");
 
-  function setTheme(next){
-    document.body.setAttribute("data-theme", next);
-    localStorage.setItem("templify_theme", next);
-  }
-  function toggleTheme(){
-    const cur = document.body.getAttribute("data-theme") || "dark";
-    setTheme(cur === "dark" ? "light" : "dark");
+  const LS_KEY = "nexora_last_settings_v1";
+
+  function readSettings(){
+    return {
+      category: categorySel?.value || "Instagram Post",
+      count: Math.max(1, Math.min(200, parseInt(countInput?.value||"24",10) || 24)),
+      style: styleSel?.value || "Dark Premium",
+      prompt: promptInput?.value || "",
+      notes: notesInput?.value || ""
+    };
   }
 
-  function drawThumb(thumb, elements, bg){
-    if(!thumb) return;
+  function saveSettings(){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(readSettings())); }catch(e){}
+  }
 
-    // Fail-safe: never break the app if preview rendering has issues
+  function loadSettings(){
     try{
-      const W0 = 980, H0 = 620;
-      thumb.innerHTML = "";
-      thumb.style.position = "relative";
-      thumb.style.overflow = "hidden";
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      const s = JSON.parse(raw);
+      if(categorySel && s.category) categorySel.value = s.category;
+      if(countInput && s.count) countInput.value = String(s.count);
+      if(styleSel && s.style) styleSel.value = s.style;
+      if(promptInput && typeof s.prompt==="string") promptInput.value = s.prompt;
+      if(notesInput && typeof s.notes==="string") notesInput.value = s.notes;
+    }catch(e){}
+  }
 
-      const w = Math.max(1, thumb.clientWidth || 260);
-      const h = Math.max(1, thumb.clientHeight || 84);
-      const sx = w / W0;
-      const sy = h / H0;
+  function setStatus(text){
+    if(statusEl) statusEl.textContent = text || "";
+  }
 
-      // --- background ---
-      let bgCss = bg || null;
-      if(!bgCss && Array.isArray(elements)){
-        const bgEl = elements.find(e => String(e.type||"").toLowerCase()==="background");
-        bgCss = bgEl?.fill || bgEl?.background || null;
-      }
-      if(bgCss){
-        const s = String(bgCss);
-        if(s.includes("gradient")){
-          thumb.style.backgroundImage = s;
-          thumb.style.backgroundColor = "";
-        }else{
-          thumb.style.backgroundImage = "";
-          thumb.style.backgroundColor = s;
-        }
-      }else{
-        // classy default
-        thumb.style.backgroundImage = "linear-gradient(135deg, rgba(11,95,255,.55), rgba(136,71,255,.45))";
-        thumb.style.backgroundColor = "";
-      }
+  function escapeHtml(s){
+    return String(s||"")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
 
-      // subtle vignette for contrast
-      const vignette = document.createElement("div");
-      vignette.style.position = "absolute";
-      vignette.style.inset = "0";
-      vignette.style.background = "radial-gradient(120px 80px at 20% 20%, rgba(255,255,255,.12), transparent 60%), linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.25))";
-      vignette.style.pointerEvents = "none";
-      thumb.appendChild(vignette);
+  function clearGrid(){ if(grid) grid.innerHTML=""; }
 
-      const list = Array.isArray(elements) ? elements.slice(0, 18) : [];
+  function cardTemplate(t){
+    const el=document.createElement("div");
+    el.className="card";
+    el.innerHTML = `
+      <div class="thumb"></div>
+      <div class="meta">
+        <div class="t1">${escapeHtml(t.title||"")}</div>
+        <div class="t2">${escapeHtml(t.subtitle||"")}</div>
+        <div class="t3">${escapeHtml(t.category||"")} • Click to edit</div>
+      </div>
+    `;
+    const thumb = el.querySelector(".thumb");
+    if(window.NexoraDesign && thumb){
+      window.NexoraDesign.renderPreview(t, thumb);
+    } else if(thumb){
+      thumb.style.height="160px";
+      thumb.style.background="linear-gradient(135deg, rgba(47,123,255,0.35), rgba(155,92,255,0.15))";
+      thumb.style.borderRadius="14px";
+    }
 
-      // helper
-      const place = (el, e) => {
-        const x = Number(e.x ?? 0) * sx;
-        const y = Number(e.y ?? 0) * sy;
-        const ww = Number(e.w ?? e.width ?? 120) * sx;
-        const hh = Number(e.h ?? e.height ?? 40) * sy;
-        el.style.position = "absolute";
-        el.style.left = x + "px";
-        el.style.top = y + "px";
-        el.style.width = Math.max(2, ww) + "px";
-        el.style.height = Math.max(2, hh) + "px";
-      };
+    el.addEventListener("click", ()=>{
+      try{ localStorage.setItem("nexora_selected_template_v1", JSON.stringify(t)); }catch(e){}
+      window.location.href="editor.html";
+    });
+    return el;
+  }
 
-      // --- render blocks first (image/cards/shapes) ---
-      const blockTypes = new Set(["image","shape","card"]);
-      list.filter(e => blockTypes.has(String(e.type||"").toLowerCase())).slice(0, 4).forEach((e) => {
-        const type = String(e.type||"").toLowerCase();
-        const d = document.createElement("div");
-        place(d, e);
+  function renderTemplates(templates){
+    clearGrid();
+    const list = Array.isArray(templates) ? templates : [];
+    for(const t of list) grid.appendChild(cardTemplate(t));
+    try{ localStorage.setItem("nexora_last_generated_v1", JSON.stringify({ templates: list })); }catch(e){}
+    setStatus(`Loaded ${list.length} templates`);
+  }
 
-        const r = Number(e.radius ?? (type==="image" ? 16 : 14));
-        d.style.borderRadius = Math.max(10, r * Math.min(sx,sy)) + "px";
-        d.style.border = "1px solid rgba(255,255,255,.18)";
-        d.style.boxShadow = "0 8px 18px rgba(0,0,0,.22)";
+  function seedTemplates(){
+    const s=readSettings();
+    const count=Math.min(12, s.count||12);
+    if(window.NexoraDesign){
+      const templates=window.NexoraDesign.generateTemplates({ ...s, count });
+      renderTemplates(templates);
+    }else{
+      const templates=Array.from({length:count}).map((_,i)=>({
+        id:"seed_"+i,
+        title:`${s.category} #${i+1}`,
+        subtitle:`${s.style} • Ready`,
+        category:s.category,
+        style:s.style,
+        canvas:{w:1080,h:1080},
+        elements:[{type:"bg",x:0,y:0,w:1080,h:1080,fill:"#0b1020",fill2:"#0a2a5a",style:"radial"}]
+      }));
+      renderTemplates(templates);
+    }
+  }
 
-        if(type === "image"){
-          d.style.background = e.background || "linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.06))";
-        }else{
-          d.style.background = e.background || "rgba(255,255,255,.10)";
-        }
-        d.style.backdropFilter = "blur(6px)";
-        d.style.pointerEvents = "none";
-        thumb.appendChild(d);
+  async function generateFromAPI(){
+    const s=readSettings();
+    setStatus("Generating…");
+    saveSettings();
+    seedTemplates(); // immediate visible change
+
+    try{
+      const resp = await fetch("/api/generate", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ prompt:s.prompt, category:s.category, style:s.style, count:s.count, notes:s.notes })
       });
+      const data = await resp.json().catch(()=>null);
+      if(!resp.ok || !data || !data.success) throw new Error(data?.error || `Request failed (${resp.status})`);
+      const templates = Array.isArray(data.templates) ? data.templates : [];
+      renderTemplates(templates);
+      setStatus(`Generated ${templates.length} templates`);
+    }catch(e){
+      console.warn(e);
+      setStatus("Generated (fallback)");
+    }
+  }
 
-      // --- badge ---
-      const badge = list.find(e => String(e.type||"").toLowerCase()==="badge");
-      if(badge){
-        const b = document.createElement("div");
-        place(b, badge);
-        b.style.height = Math.max(10, Number(badge.h ?? 46) * sy) + "px";
-        b.style.borderRadius = "999px";
-        b.style.border = "1px solid rgba(255,255,255,.20)";
-        b.style.background = "rgba(0,0,0,.18)";
-        b.style.display = "flex";
-        b.style.alignItems = "center";
-        b.style.padding = "0 10px";
-        b.style.fontSize = Math.max(9, (Number(badge.fontSize ?? 14) * Math.min(sx,sy))) + "px";
-        b.style.fontWeight = String(badge.fontWeight ?? 800);
-        b.style.letterSpacing = ".3px";
-        b.style.color = badge.color || "rgba(255,255,255,.92)";
-        b.style.textTransform = "uppercase";
-        b.style.whiteSpace = "nowrap";
-        b.style.overflow = "hidden";
-        b.style.textOverflow = "ellipsis";
-        b.textContent = (badge.title || "").toString().slice(0, 32) || "NEW";
-        b.style.pointerEvents = "none";
-        thumb.appendChild(b);
+  function bind(){
+    // topbar buttons
+    try{
+      const saved = localStorage.getItem("nexora_theme");
+      if(saved==="light"||saved==="dark") document.body.setAttribute("data-theme", saved);
+    }catch(e){}
+    if(themeBtn) themeBtn.addEventListener("click", ()=>{
+      const cur = document.body.getAttribute("data-theme") || "dark";
+      const next = cur === "dark" ? "light" : "dark";
+      document.body.setAttribute("data-theme", next);
+      try{ localStorage.setItem("nexora_theme", next); }catch(e){}
+    });
+    if(openEditorBtn) openEditorBtn.addEventListener("click", ()=>{
+      window.location.href = "editor.html";
+    });
+    // (Library / Animate are placeholders for now)
+    if(btnTemplates) btnTemplates.addEventListener("click", ()=>{ setStatus("Library coming soon"); });
+    if(btnAnimate) btnAnimate.addEventListener("click", ()=>{ setStatus("Animate Studio coming soon"); });
+
+    if(genBtn) genBtn.addEventListener("click", generateFromAPI);
+    if(newLayoutBtn) newLayoutBtn.addEventListener("click", ()=>{
+      if(promptInput) promptInput.value = (promptInput.value||"").trim() + " ";
+      generateFromAPI();
+    });
+    if(newStyleBtn) newStyleBtn.addEventListener("click", ()=>{
+      if(styleSel){
+        const opts=[...styleSel.options].map(o=>o.value);
+        const i=Math.max(0, opts.indexOf(styleSel.value));
+        styleSel.value = opts[(i+1)%opts.length] || styleSel.value;
       }
-
-      // --- headline + subline ---
-      const heading = list.find(e => String(e.type||"").toLowerCase()==="heading") || list.find(e => String(e.type||"").toLowerCase()==="subhead");
-      if(heading){
-        const t = document.createElement("div");
-        place(t, heading);
-        t.style.height = "auto";
-        t.style.maxHeight = (Math.max(18, Number(heading.h ?? 120) * sy)) + "px";
-        t.style.fontWeight = String(heading.fontWeight ?? 800);
-        t.style.color = heading.color || "#fff";
-        t.style.fontSize = Math.max(12, (Number(heading.fontSize ?? 54) * Math.min(sx,sy))) + "px";
-        t.style.lineHeight = "1.05";
-        t.style.textShadow = "0 8px 18px rgba(0,0,0,.35)";
-        t.style.display = "-webkit-box";
-        t.style.webkitLineClamp = "2";
-        t.style.webkitBoxOrient = "vertical";
-        t.style.overflow = "hidden";
-        t.textContent = (heading.title || "").toString().trim() || "Premium Design";
-        t.style.pointerEvents = "none";
-        thumb.appendChild(t);
-      }
-
-      const body = list.find(e => String(e.type||"").toLowerCase()==="text" || String(e.type||"").toLowerCase()==="subhead");
-      if(body){
-        const t = document.createElement("div");
-        place(t, body);
-        t.style.height = "auto";
-        t.style.maxHeight = (Math.max(14, Number(body.h ?? 80) * sy)) + "px";
-        t.style.fontWeight = "500";
-        t.style.color = body.color || "rgba(255,255,255,.85)";
-        t.style.fontSize = Math.max(9, (Number(body.fontSize ?? 16) * Math.min(sx,sy))) + "px";
-        t.style.lineHeight = "1.15";
-        t.style.display = "-webkit-box";
-        t.style.webkitLineClamp = "2";
-        t.style.webkitBoxOrient = "vertical";
-        t.style.overflow = "hidden";
-        const s = (body.sub || body.title || "").toString().trim().replace(/\s+/g," ");
-        t.textContent = s.slice(0, 60);
-        t.style.pointerEvents = "none";
-        thumb.appendChild(t);
-      }
-
-      // --- CTA button ---
-      const cta = list.find(e => String(e.type||"").toLowerCase()==="cta");
-      if(cta){
-        const b = document.createElement("div");
-        place(b, cta);
-        b.style.height = Math.max(10, Number(cta.h ?? 54) * sy) + "px";
-        b.style.borderRadius = Math.max(10, Number(cta.radius ?? 16) * Math.min(sx,sy)) + "px";
-        b.style.background = cta.background || "linear-gradient(135deg, rgba(11,95,255,.95), rgba(136,71,255,.85))";
-        b.style.border = "1px solid rgba(255,255,255,.18)";
-        b.style.boxShadow = "0 10px 20px rgba(11,95,255,.20)";
-        b.style.display = "flex";
-        b.style.alignItems = "center";
-        b.style.justifyContent = "center";
-        b.style.padding = "0 10px";
-        b.style.fontSize = Math.max(9, (Number(cta.fontSize ?? 14) * Math.min(sx,sy))) + "px";
-        b.style.fontWeight = String(cta.fontWeight ?? 800);
-        b.style.color = cta.color || "#fff";
-        b.style.whiteSpace = "nowrap";
-        b.style.overflow = "hidden";
-        b.style.textOverflow = "ellipsis";
-        b.textContent = (cta.title || "Get Started").toString().slice(0, 22);
-        b.style.pointerEvents = "none";
-        thumb.appendChild(b);
-      }
-
-    }catch(err){
-      console.warn("Preview render failed; using fallback boxes.", err);
+      generateFromAPI();
+    });
+    if(exportBtn) exportBtn.addEventListener("click", ()=>{
       try{
-        // fallback: simple minis (never crash)
-        thumb.innerHTML = "";
-        const w0 = 980, h0 = 620;
-        const sx = (thumb.clientWidth||260) / w0;
-        const sy = (thumb.clientHeight||84) / h0;
-        (elements||[]).slice(0,6).forEach((e) => {
-          const m = document.createElement("div");
-          m.className = "mini";
-          m.style.left = (Number(e.x||0)*sx) + "px";
-          m.style.top = (Number(e.y||0)*sy) + "px";
-          m.style.width = (Number(e.w||e.width||120)*sx) + "px";
-          m.style.height = (Number(e.h||e.height||40)*sy) + "px";
-          thumb.appendChild(m);
-        });
-      }catch(_){}
-    }
-  }
-
-
-  function seedTemplates(n){
-    grid.innerHTML = "";
-    __lastTemplates = [];
-    const category = $("#cat").value;
-    const style = $("#style").value;
-
-    // Simple "real" layouts for the editor (cards on canvas)
-    const patterns = [
-  // Instagram Post (Square)
-  { name:"Bold Promo", vibe:"Modern", layout:"split", accent:"badge" },
-  { name:"Minimal Quote", vibe:"Clean", layout:"center", accent:"line" },
-  { name:"Product Highlight", vibe:"Vibrant", layout:"imageRight", accent:"pill" },
-
-  // YouTube Thumbnail (16:9)
-  { name:"Big Face + Text", vibe:"High Contrast", layout:"ytFace", accent:"stroke" },
-  { name:"Tech Review", vibe:"Neon", layout:"ytTech", accent:"glow" },
-
-  // Flyer / Poster (Portrait)
-  { name:"Event Flyer", vibe:"Premium", layout:"flyerHero", accent:"tag" },
-  { name:"Business Flyer", vibe:"Corporate", layout:"flyerSplit", accent:"curve" },
-
-  // Business Card
-  { name:"Classic Card", vibe:"Elegant", layout:"cardClassic", accent:"bar" },
-  { name:"Modern Card", vibe:"Minimal", layout:"cardModern", accent:"dot" },
-
-  // Logo
-  { name:"Monogram", vibe:"Luxury", layout:"logoMono", accent:"ring" },
-  { name:"Abstract Mark", vibe:"Tech", layout:"logoAbstract", accent:"gradient" },
-
-  // Presentation Slide
-  { name:"Pitch Slide", vibe:"Clean", layout:"slideSplit", accent:"footer" },
-  { name:"Title Slide", vibe:"Bold", layout:"slideTitle", accent:"shape" },
-
-  // Resume
-  { name:"Resume Modern", vibe:"Professional", layout:"resumeModern", accent:"sidebar" },
-
-  // Story (9:16)
-  { name:"Story Promo", vibe:"Trendy", layout:"storyHero", accent:"sticker" }
-];
-
-    for(let i=1;i<=n;i++){
-      const div = document.createElement("div");
-      div.className = "tile";
-      div.tabIndex = 0;
-
-      const layoutWord = ["Bold","Clean","Modern","Vibrant","Minimal"][i%5];
-      div.innerHTML = `
-        <div class="thumb" aria-hidden="true"></div>
-        <b>${category} #${i}</b>
-        <span>${style} • ${layoutWord} layout • Click to edit</span>
-      `;
-
-      const elements = patterns[i % patterns.length](i).map(e => ({ id: (globalThis.crypto?.randomUUID?.() || (Math.random().toString(16).slice(2) + Date.now().toString(16))), ...e }));
-
-      const thumb = div.querySelector('.thumb');
-      if(thumb){
-        drawThumb(thumb, elements);
+        const raw = localStorage.getItem("nexora_last_generated_v1");
+        const payload = raw ? JSON.parse(raw) : { templates: [] };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+        const a=document.createElement("a");
+        a.href=URL.createObjectURL(blob);
+        a.download="nexora-templates.json";
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+      }catch(e){
+        alert("Nothing to export yet.");
       }
+    });
 
-      const template = {
-        id: `seed_${Date.now()}_${i}`,
-        title: `${category} #${i}`,
-        description: `${style} • ${layoutWord} layout`,
-        category,
-        style,
-        canvas: { w: 980, h: 620 },
-        elements
-      };
-      __lastTemplates.push(template);
-
-      div.addEventListener("click", ()=>openEditorWith(template));
-      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(template); });
-      grid.appendChild(div);
+    for(const el of [categorySel, countInput, styleSel, promptInput, notesInput]){
+      if(!el) continue;
+      el.addEventListener("change", ()=>{ saveSettings(); seedTemplates(); });
+      el.addEventListener("input", ()=>{ saveSettings(); });
     }
   }
 
-  function openEditorWith(payload){
-    // payload can be {cat,style,i} OR a full template object
-    const cat = payload?.category || payload?.cat || $("#cat").value;
-    const style = payload?.style || $("#style").value;
-
-    // Store draft so editor can load a REAL template (elements/positions)
-    localStorage.setItem("templify_draft", JSON.stringify({
-      meta: {
-        cat,
-        style,
-        i: payload?.i || 1,
-        prompt: $("#prompt").value.trim(),
-        notes: $("#notes").value.trim(),
-        title: payload?.title || null,
-        description: payload?.description || payload?.subtitle || null,
-      },
-      template: payload?.elements ? payload : null,
-      createdAt: Date.now()
-    }));
-    window.location.href = "editor.html";
+  function boot(){
+    loadSettings();
+    bind();
+    seedTemplates(); // boxes visible immediately
+    setStatus("Ready");
   }
 
-  // Keep latest generated templates (for tile click -> editor)
-  let __lastTemplates = [];
+  document.addEventListener("DOMContentLoaded", boot);
+})();</script>
 
-  $("#openEditor").addEventListener("click", ()=>openEditorWith({cat:$("#cat").value, style:$("#style").value, i:1}));
-  $("#themeBtn").addEventListener("click", toggleTheme);
-
-  $("#exportBtn").addEventListener("click", ()=>{
-    const items = [...grid.children].map((el, idx)=>({
-      title: el.querySelector("b")?.textContent || `Template #${idx+1}`,
-      desc: el.querySelector("span")?.textContent || ""
-    }));
-    const blob = new Blob([JSON.stringify({items}, null, 2)], {type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "templify_templates.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-
-  // restore theme + initial previews
-  const saved = localStorage.getItem("templify_theme");
-  if(saved==="light"||saved==="dark") setTheme(saved);
-  seedTemplates(12);
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("generateBtn");
-  if (!btn) {
-    alert("Generate button not found. UI mismatch.");
-    return;
-  }
-
-  btn.addEventListener("click", async (event) => {
-currentLayout = "Modern";
-currentStyle = "Dark Premium";
-
-    const payload = {
-      category: document.getElementById("cat")?.value || "Instagram Post",
-      style: document.getElementById("style")?.value || "Dark Premium",
-      count: parseInt(document.getElementById("count")?.value || "10", 10),
-      prompt: document.getElementById("prompt")?.value || "",
-      notes: document.getElementById("notes")?.value || ""
-    };
-
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      console.log("AI RESPONSE:", data);
-
-      // ✅ MINIMAL FIX: connect AI result to the existing renderer
-      // Render AI templates into the grid
-      const templates = Array.isArray(data?.templates) ? data.templates : [];
-      grid.innerHTML = "";
-      const cat = payload.category;
-      const style = payload.style;
-
-      // Normalize templates to our editor-friendly schema
-      const normalized = (templates.length ? templates : []).map((t, i) => {
-        const elements = Array.isArray(t.elements) ? t.elements : [];
-        return {
-          id: t.id || `ai_${Date.now()}_${i+1}`,
-          title: t.title || `${cat} #${i+1}`,
-          description: t.description || t.subtitle || `${style} • AI generated`,
-          category: t.category || payload.category || cat,
-          style: t.style || payload.style || style,
-          canvas: t.canvas || { w: 980, h: 620 },
-          elements: elements.map(e => ({
-            id: e.id || (globalThis.crypto?.randomUUID?.() || (Math.random().toString(16).slice(2) + Date.now().toString(16))),
-            type: String(e.type ?? "card"),
-            x: Number(e.x ?? 80), y: Number(e.y ?? 80),
-            w: Number(e.w ?? e.width ?? 420), h: Number(e.h ?? e.height ?? 120),
-            title: String(e.title ?? e.text ?? (String(e.type??"").toLowerCase()==="image" ? "IMAGE" : "TEXT")),
-            sub: String(e.sub ?? e.caption ?? ""),
-            fontSize: (e.fontSize ?? null),
-            fontWeight: (e.fontWeight ?? null),
-            color: (e.color ?? null),
-            align: (e.align ?? null),
-            radius: (e.radius ?? null),
-            fill: (e.fill ?? null),
-            background: (e.background ?? null),
-            opacity: (e.opacity ?? null)
-          }))
-        };
-      });
-
-      // Apply correct canvas sizes + attach rich thumbnail preview specs
-      normalized.forEach((t,i)=>{
-        applyCategoryCanvas(t);
-        t.preview = buildPreviewSpec(t,i,prompt);
-      });
-
-
-      // If AI returned nothing usable, fall back to seeded "real" templates
-      if(!normalized.length){
-        seedTemplates(payload.count);
-        statusEl.textContent = `Generated ${payload.count}`;
-        return;
-      }
-
-      __lastTemplates = normalized;
-      grid.innerHTML = "";
-
-      __lastTemplates.forEach((t) => {
-        const div = document.createElement("div");
-        div.className = "tile";
-        div.tabIndex = 0;
-        div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${t.title}</b><span>${t.description}</span>`;
-
-      const thumb = div.querySelector('.thumb');
-      if(thumb){
-        drawThumb(thumb, t.elements, t.bg);
-      }
-
-        div.addEventListener("click", ()=>openEditorWith(t));
-        div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
-        grid.appendChild(div);
-      });
-
-      statusEl.textContent = `Generated ${__lastTemplates.length}`;
-    } catch (e) {
-      // ✅ Fallback: never leave user with "nothing happened"
-      seedTemplates(payload.count);
-    }
-  });
-});
-</script>
-<script>
-  document.getElementById("btnTemplates")?.addEventListener("click", () => {
-    alert("Templates Library– coming soon");
-  });
-
-  document.getElementById("btnAnimate")?.addEventListener("click", () => {
-    alert("Animate – coming soon");
-  });
-</script>
-
-<script type="module">
-// Nexora: New Layout + New Style (SAFE)
-// UI unchanged. Only updates the preview tile text.
-
-const layouts = ["Bold","Clean","Modern","Minimal","Vibrant"];
-const styles  = ["Dark Premium","Light Minimal","Neon","Glassmorphism","Corporate"];
-
-const grid = document.getElementById("previewGrid");
-const statusEl = document.getElementById("status");
-
-function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-function setStatus(msg){ if(statusEl) statusEl.textContent = msg; }
-
-function updateTilesText({layout=null, style=null}={}){
-  if(!grid) return;
-  const tiles = Array.from(grid.querySelectorAll(".tile"));
-  tiles.forEach((tile) => {
-    const span = tile.querySelector("span");
-    if(!span) return;
-    const curStyle = style || (document.getElementById("style")?.value) || "Dark Premium";
-    const curLayout = layout || span.textContent.match(/\b(Bold|Clean|Modern|Minimal|Vibrant)\b/)?.[0] || "Modern";
-    span.textContent = `${curStyle} • ${curLayout} layout • Click to edit`;
-  });
-}
-
-document.getElementById("newLayoutBtn")?.addEventListener("click", () => {
-  updateTilesText({ layout: pick(layouts) });
-  setStatus("New layout applied");
-});
-
-document.getElementById("newStyleBtn")?.addEventListener("click", () => {
-  const s = pick(styles);
-  const sel = document.getElementById("style");
-  if(sel){
-    const opt = Array.from(sel.options).find(o => o.textContent.trim() === s);
-    if(opt) sel.value = opt.textContent.trim();
-  }
-  updateTilesText({ style: s });
-  setStatus("New style applied");
-});
-
-</script>
-
-
-<script>
-// --- Real template thumbnail engine (Phase E: visible Canva-style thumbnails) ---
-const CATEGORY_SIZES = {
-  "Instagram Post": { w:1080, h:1080 },
-  "YouTube Thumbnail": { w:1280, h:720 },
-  "Flyer": { w:1080, h:1350 },
-  "Business Card": { w:1050, h:600 },
-  "Logo": { w:800, h:800 },
-  "Presentation Slide": { w:1920, h:1080 },
-  "Resume": { w:1240, h:1754 },
-  "Poster": { w:1080, h:1350 },
-  "Story": { w:1080, h:1920 },
-  "TikTok": { w:1080, h:1920 } // if you add it later
-};
-
-function pickPalette(style, i){
-  // deterministic palettes to make each template look clearly different
-  const sets = [
-    ["#0b1020","#101b3a","#2b6cff","#7cf6ff","#ffffff"],
-    ["#0b0f1a","#1b1033","#ff3d6e","#ffd36b","#ffffff"],
-    ["#071017","#0c2530","#22c55e","#a7f3d0","#ffffff"],
-    ["#0d0b12","#22122c","#a855f7","#f0abfc","#ffffff"],
-    ["#0b0c10","#162033","#f59e0b","#fde68a","#ffffff"],
-    ["#070a12","#121a2a","#60a5fa","#93c5fd","#ffffff"],
-  ];
-  const s = (String(style||"") + "|" + i);
-  let h=0; for(let k=0;k<s.length;k++) h = (h*31 + s.charCodeAt(k))>>>0;
-  const p = sets[h % sets.length];
-  return { bg1:p[0], bg2:p[1], accent:p[2], accent2:p[3], text:p[4] };
-}
-
-function safeHeadline(text){
-  const t = String(text||"").trim();
-  if(!t) return "New Collection";
-  // shorten long prompts to a headline-like chunk
-  const cleaned = t.replace(/\s+/g," ").replace(/[\r\n]+/g," ").slice(0,64);
-  return cleaned.length > 34 ? cleaned.slice(0,32).trim()+"…" : cleaned;
-}
-
-function buildPreviewSpec(t, i, prompt){
-  const cat = t.category || "Instagram Post";
-  const pal = pickPalette(t.style || t.subtitle || "Dark Premium", i);
-  const headline = safeHeadline(t.title || prompt || "New Collection");
-  const sub = (t.subtitle || t.style || "Dark Premium");
-  const variant = (i % 6);
-
-  // per-category layout choices (kept simple but clearly different)
-  const layouts = {
-    "Instagram Post": ["split","centerBadge","imageTop","diagonal","card","stack"],
-    "YouTube Thumbnail": ["ytFace","ytBigText","ytSplit","ytBanner","ytBox","ytNeon"],
-    "Flyer": ["flyerHero","flyerSplit","flyerCurve","flyerGrid","flyerPhoto","flyerPoster"],
-    "Poster": ["posterHex","posterSplit","posterCurve","posterGrid","posterPhoto","posterMinimal"],
-    "Business Card": ["cardClassic","cardModern","cardDark","cardStrip","cardLeft","cardMono"],
-    "Logo": ["logoMono","logoAbstract","logoRing","logoTech","logoBadge","logoMark"],
-    "Presentation Slide": ["slideSplit","slideTitle","slideAgenda","slideStats","slideQuote","slideSection"],
-    "Resume": ["resumeModern","resumeSidebar","resumeMinimal","resumeTwoCol","resumeClean","resumePro"],
-    "Story": ["storyHero","storySplit","storySticker","storyQuote","storyNeon","storyMinimal"]
-  };
-
-  const layout = (layouts[cat] ? layouts[cat][variant] : layouts["Instagram Post"][variant]) || "split";
-
-  // spec is only for thumbnail rendering (does not affect editor yet)
-  return {
-    cat,
-    layout,
-    pal,
-    headline,
-    sub,
-    cta: (["Shop Now","Get Started","Join Now","Learn More","Start Today","Download"][variant]),
-    badge: (["LIMITED","NEW","PRO","HOT","2025","TREND"][variant]),
-    price: (["30% OFF","$19/mo","FREE","New Drop","Limited Seats","Pro Pack"][variant])
-  };
-}
-
-function applyCategoryCanvas(t){
-  const s = CATEGORY_SIZES[t.category];
-  if(!s) return t;
-  // keep existing canvas if already correct; otherwise overwrite for correct aspect
-  if(!t.canvas || !t.canvas.w || !t.canvas.h || (t.canvas.w===980 && t.canvas.h===620)){
-    t.canvas = { w:s.w, h:s.h };
-  }
-  return t;
-}
-
-function renderPreview(canvas, t){
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-
-  const p = t.preview || buildPreviewSpec(t, 0, "");
-  const pal = p.pal || pickPalette(t.style || t.subtitle || "Dark Premium", 0);
-
-  // Background
-  const g = ctx.createLinearGradient(0,0,W,H);
-  g.addColorStop(0, pal.bg1);
-  g.addColorStop(1, pal.bg2);
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,W,H);
-
-  // Soft vignette
-  const vg = ctx.createRadialGradient(W*0.2,H*0.2,10, W*0.6,H*0.5, Math.max(W,H));
-  vg.addColorStop(0, "rgba(255,255,255,0.06)");
-  vg.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = vg;
-  ctx.fillRect(0,0,W,H);
-
-  // Helpers
-  const rr = (x,y,w,h,r)=>{
-    r=Math.min(r, w/2, h/2);
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-  };
-
-  const drawBadge = (x,y,txt)=>{
-    ctx.font = `700 ${Math.max(10, Math.round(W*0.04))}px Poppins,system-ui`;
-    const padX = Math.round(W*0.03), padY = Math.round(H*0.02);
-    const tw = ctx.measureText(txt).width;
-    const bw = tw + padX*2, bh = Math.round(W*0.09);
-    rr(x,y,bw,bh, bh/2);
-    ctx.fillStyle = "rgba(255,255,255,0.14)";
-    ctx.fill();
-    rr(x,y,bw,bh, bh/2);
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = pal.text;
-    ctx.fillText(txt, x+padX, y+bh-padY);
-  };
-
-  const drawButton = (x,y,txt)=>{
-    ctx.font = `700 ${Math.max(10, Math.round(W*0.045))}px Poppins,system-ui`;
-    const padX = Math.round(W*0.05), padY = Math.round(H*0.03);
-    const tw = ctx.measureText(txt).width;
-    const bw = tw + padX*2, bh = Math.round(W*0.12);
-    rr(x,y,bw,bh, bh/2);
-    ctx.fillStyle = pal.accent;
-    ctx.fill();
-    ctx.fillStyle = "#06101b";
-    ctx.fillText(txt, x+padX, y+bh-padY);
-  };
-
-  const wrapText = (text, x, y, maxW, lineH, maxLines)=>{
-    const words = String(text||"").split(/\s+/).filter(Boolean);
-    let line = "", lines = 0;
-    for(let i=0;i<words.length;i++){
-      const test = line ? (line+" "+words[i]) : words[i];
-      if(ctx.measureText(test).width > maxW && line){
-        ctx.fillText(line, x, y + lines*lineH);
-        lines++; line = words[i];
-        if(lines >= maxLines-1) break;
-      } else {
-        line = test;
-      }
-    }
-    if(lines < maxLines) ctx.fillText(line, x, y + lines*lineH);
-  };
-
-  // Layout primitives (very visible differences)
-  const layout = p.layout || "split";
-  const pad = Math.round(W*0.08);
-  const title = p.headline || "New Collection";
-  const sub = p.sub || "Dark Premium";
-
-  // Decorative accent shapes
-  ctx.save();
-  ctx.globalAlpha = 0.9;
-
-  if(layout.includes("Neon") || layout.includes("glow")){
-    ctx.shadowColor = pal.accent2;
-    ctx.shadowBlur = Math.round(W*0.18);
-  } else {
-    ctx.shadowColor = "rgba(0,0,0,0)";
-    ctx.shadowBlur = 0;
-  }
-
-  // Big accent blob
-  rr(W*0.58, -H*0.18, W*0.55, H*0.55, W*0.2);
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.fill();
-
-  ctx.shadowBlur = 0;
-  ctx.restore();
-
-  // Category-specific compositions
-  if(p.cat === "YouTube Thumbnail"){
-    // Left: big text, Right: face/box
-    rr(pad, pad, W*0.58, H*0.72, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-
-    // "Face" placeholder
-    rr(W*0.68, H*0.18, W*0.26, H*0.62, 22);
-    ctx.fillStyle = "rgba(255,255,255,0.10)";
-    ctx.fill();
-
-    // Stroke
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(W*0.68+2, H*0.18+2, W*0.26-4, H*0.62-4);
-
-    // Text
-    ctx.fillStyle = pal.text;
-    ctx.font = `800 ${Math.round(W*0.11)}px Poppins,system-ui`;
-    wrapText(title.toUpperCase(), pad+Math.round(W*0.04), pad+Math.round(H*0.24), W*0.50, Math.round(W*0.12), 2);
-
-    ctx.font = `600 ${Math.round(W*0.05)}px Poppins,system-ui`;
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    wrapText(sub, pad+Math.round(W*0.04), pad+Math.round(H*0.50), W*0.50, Math.round(W*0.06), 2);
-
-    drawBadge(pad+Math.round(W*0.04), H*0.72, p.badge || "NEW");
-  }
-  else if(p.cat === "Business Card"){
-    // Card base
-    rr(pad*0.8, pad*0.8, W-pad*1.6, H-pad*1.6, 22);
-    ctx.fillStyle = "rgba(255,255,255,0.07)";
-    ctx.fill();
-    // Accent bar
-    ctx.fillStyle = pal.accent;
-    rr(pad*0.8, H-pad*1.1, W-pad*1.6, pad*0.35, 18);
-    ctx.fill();
-    // Logo mark
-    rr(pad*1.1, pad*1.1, W*0.16, W*0.16, W*0.08);
-    ctx.fillStyle = "rgba(255,255,255,0.14)";
-    ctx.fill();
-    // Name + title
-    ctx.fillStyle = pal.text;
-    ctx.font = `800 ${Math.round(W*0.08)}px Poppins,system-ui`;
-    ctx.fillText(title.slice(0,14), pad*1.1, H*0.45);
-    ctx.font = `600 ${Math.round(W*0.04)}px Poppins,system-ui`;
-    ctx.fillStyle = "rgba(255,255,255,0.80)";
-    ctx.fillText("Creative Studio", pad*1.1, H*0.55);
-    // Contact lines
-    ctx.fillStyle = "rgba(255,255,255,0.70)";
-    ctx.font = `500 ${Math.round(W*0.035)}px Poppins,system-ui`;
-    ctx.fillText("hello@nexora.app", pad*1.1, H*0.70);
-    ctx.fillText("+92 300 000 0000", pad*1.1, H*0.80);
-  }
-  else if(p.cat === "Logo"){
-    // Logo mark + word
-    rr(W*0.18, H*0.18, W*0.64, H*0.64, 28);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-    ctx.save();
-    ctx.translate(W*0.5, H*0.46);
-    ctx.rotate(-0.15);
-    rr(-W*0.18, -W*0.18, W*0.36, W*0.36, W*0.12);
-    ctx.fillStyle = pal.accent;
-    ctx.fill();
-    ctx.restore();
-
-    ctx.fillStyle = pal.text;
-    ctx.font = `900 ${Math.round(W*0.12)}px Poppins,system-ui`;
-    ctx.textAlign = "center";
-    ctx.fillText((title.split(" ")[0]||"NEXORA").toUpperCase(), W*0.5, H*0.83);
-    ctx.textAlign = "left";
-  }
-  else if(p.cat === "Presentation Slide"){
-    // Split slide
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    rr(pad, pad, W-pad*2, H-pad*2, 18);
-    ctx.fill();
-    // Left content
-    ctx.fillStyle = pal.text;
-    ctx.font = `900 ${Math.round(W*0.07)}px Poppins,system-ui`;
-    wrapText(title, pad+Math.round(W*0.04), pad+Math.round(H*0.18), W*0.52, Math.round(W*0.08), 2);
-    ctx.font = `600 ${Math.round(W*0.035)}px Poppins,system-ui`;
-    ctx.fillStyle = "rgba(255,255,255,0.80)";
-    ctx.fillText("• Key point 1", pad+Math.round(W*0.04), H*0.52);
-    ctx.fillText("• Key point 2", pad+Math.round(W*0.04), H*0.60);
-    ctx.fillText("• Key point 3", pad+Math.round(W*0.04), H*0.68);
-    // Right visual
-    rr(W*0.66, H*0.22, W*0.26, H*0.56, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.10)";
-    ctx.fill();
-    // Footer
-    ctx.fillStyle = pal.accent;
-    rr(pad, H-pad*1.1, W-pad*2, pad*0.35, 14);
-    ctx.fill();
-  }
-  else if(p.cat === "Resume"){
-    // Resume: left sidebar + sections
-    rr(pad, pad, W-pad*2, H-pad*2, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-    rr(pad, pad, W*0.26, H-pad*2, 18);
-    ctx.fillStyle = pal.accent;
-    ctx.globalAlpha = 0.22;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = pal.text;
-    ctx.font = `900 ${Math.round(W*0.055)}px Poppins,system-ui`;
-    ctx.fillText(title.split(" ")[0] || "Hassan", pad+Math.round(W*0.03), pad+Math.round(H*0.16));
-    ctx.font = `600 ${Math.round(W*0.03)}px Poppins,system-ui`;
-    ctx.fillStyle = "rgba(255,255,255,0.80)";
-    ctx.fillText("Product Designer", pad+Math.round(W*0.03), pad+Math.round(H*0.23));
-    // Right blocks
-    const bx = W*0.34, bw = W*0.58;
-    const blk = (y)=>{
-      rr(bx, y, bw, H*0.10, 14);
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      ctx.fill();
-    };
-    blk(H*0.30); blk(H*0.44); blk(H*0.58); blk(H*0.72);
-  }
-  else if(p.cat === "Story"){
-    // Story: big hero + sticker + CTA
-    rr(pad, pad, W-pad*2, H-pad*2, 22);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-    rr(pad*1.2, pad*1.2, W-pad*2.4, H*0.56, 24);
-    ctx.fillStyle = "rgba(255,255,255,0.10)";
-    ctx.fill();
-    drawBadge(pad*1.2, H*0.62, p.badge || "TREND");
-    ctx.fillStyle = pal.text;
-    ctx.font = `900 ${Math.round(W*0.10)}px Poppins,system-ui`;
-    wrapText(title, pad*1.2, H*0.72, W-pad*2.4, Math.round(W*0.11), 2);
-    drawButton(pad*1.2, H*0.86, p.cta || "Swipe Up");
-  }
-  else if(p.cat === "Flyer" || p.cat === "Poster"){
-    // Flyer/Poster: photo left, details right
-    rr(pad, pad, W-pad*2, H-pad*2, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-    rr(pad*1.1, pad*1.1, W*0.46, H-pad*2.2, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.10)";
-    ctx.fill();
-    rr(W*0.58, pad*1.1, W*0.34, H*0.18, 16);
-    ctx.fillStyle = pal.accent;
-    ctx.globalAlpha = 0.22;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = pal.text;
-    ctx.font = `900 ${Math.round(W*0.075)}px Poppins,system-ui`;
-    wrapText(title, W*0.58, H*0.40, W*0.34, Math.round(W*0.085), 3);
-    ctx.fillStyle = "rgba(255,255,255,0.80)";
-    ctx.font = `600 ${Math.round(W*0.035)}px Poppins,system-ui`;
-    ctx.fillText("• Services • Pricing • Contact", W*0.58, H*0.66);
-    drawButton(W*0.58, H*0.74, p.cta || "Get Started");
-    drawBadge(pad*1.1, pad*1.1, p.badge || "NEW");
-  }
-  else {
-    // Instagram Post default
-    rr(pad, pad, W-pad*2, H-pad*2, 18);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fill();
-
-    if(layout === "centerBadge"){
-      drawBadge(pad*1.1, pad*1.1, p.badge || "LIMITED");
-      ctx.fillStyle = pal.text;
-      ctx.font = `900 ${Math.round(W*0.10)}px Poppins,system-ui`;
-      wrapText(title, pad*1.1, H*0.48, W-pad*2.2, Math.round(W*0.11), 2);
-      drawButton(pad*1.1, H*0.74, p.cta || "Shop Now");
-    } else {
-      // image-right
-      rr(W*0.58, H*0.22, W*0.30, H*0.52, 22);
-      ctx.fillStyle = "rgba(255,255,255,0.10)";
-      ctx.fill();
-      ctx.fillStyle = pal.text;
-      ctx.font = `900 ${Math.round(W*0.09)}px Poppins,system-ui`;
-      wrapText(title, pad*1.1, H*0.40, W*0.44, Math.round(W*0.10), 2);
-      ctx.font = `600 ${Math.round(W*0.04)}px Poppins,system-ui`;
-      ctx.fillStyle = "rgba(255,255,255,0.82)";
-      ctx.fillText(sub, pad*1.1, H*0.62);
-      drawButton(pad*1.1, H*0.70, p.cta || "Get Started");
-      drawBadge(pad*1.1, pad*1.1, p.badge || "NEW");
-    }
-  }
-
-  // subtle border
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5,0.5,W-1,H-1);
-}
-</script>
 
 </body>
 </html>
