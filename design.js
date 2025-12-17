@@ -1,125 +1,90 @@
-// design.js — Canva-level Layout Intelligence Upgrade
-// SAFE: UI-agnostic, preview-agnostic, editor-compatible
 
-export function generateTemplates(count = 24) {
-  const layouts = [
-    heroLeftImageRight,
-    fullBleedImageOverlay,
-    minimalTypography,
-    badgePromo,
-    editorialAnnouncement
-  ];
+// design.js — Phase F v1 (Canva-level visual layouts)
+(function () {
+  const Design = {};
 
   const palettes = [
-    { bg: "#0b1220", primary: "#ffffff", accent: "#4f8cff", muted: "#aab0bd" },
-    { bg: "#052016", primary: "#eafff4", accent: "#22c55e", muted: "#7dd3a7" },
-    { bg: "#1f1409", primary: "#fff7ed", accent: "#f59e0b", muted: "#fdba74" },
-    { bg: "#1b0f17", primary: "#fde7f3", accent: "#ec4899", muted: "#f9a8d4" },
-    { bg: "#0f1a17", primary: "#ecfeff", accent: "#06b6d4", muted: "#67e8f9" }
+    { bg: "#0b1220", card: "#111a2e", ink: "#ffffff", muted: "#aab0bd", accent: "#4f8cff" },
+    { bg: "#071613", card: "#0f2a21", ink: "#eafff4", muted: "#7dd3a7", accent: "#22c55e" },
+    { bg: "#1b0f17", card: "#2a1623", ink: "#fde7f3", muted: "#f9a8d4", accent: "#ec4899" },
+    { bg: "#0f1a17", card: "#132a26", ink: "#ecfeff", muted: "#67e8f9", accent: "#06b6d4" },
+    { bg: "#1f1409", card: "#2a1b0c", ink: "#fff7ed", muted: "#fdba74", accent: "#f59e0b" }
   ];
 
-  const templates = [];
+  const layouts = [heroCTA, splitPromo, minimalQuote, badgeOffer, editorial];
 
-  for (let i = 0; i < count; i++) {
-    const layout = layouts[i % layouts.length];
-    const palette = palettes[i % palettes.length];
-    templates.push(layout(i, palette));
+  function generateTemplates(opts = {}) {
+    const count = Math.min(Math.max(opts.count || 24, 1), 200);
+    const category = opts.category || "Instagram Post";
+    const style = opts.style || "Dark Premium";
+    const prompt = opts.prompt || "";
+    const templates = [];
+
+    for (let i = 0; i < count; i++) {
+      const palette = palettes[i % palettes.length];
+      const layout = layouts[i % layouts.length];
+      templates.push(layout(i, palette, category, style, prompt));
+    }
+    return templates;
   }
 
-  return templates;
-}
+  function baseTemplate(title, palette, category, style) {
+    return { title, subtitle: `${style} • Canva-level`, category, palette, elements: [] };
+  }
 
-/* ---------- LAYOUT ARCHETYPES ---------- */
+  function heroCTA(i, p, c, s, prompt) {
+    const t = baseTemplate(prompt || "Grow Your Brand", p, c, s);
+    t.elements = [
+      { type: "background", fill: p.bg },
+      { type: "heading", text: prompt || "Grow Your Brand", x: 70, y: 140, fontSize: 60, color: p.ink },
+      { type: "text", text: "Premium design built to convert", x: 70, y: 240, fontSize: 28, color: p.muted },
+      { type: "button", text: "Get Started", x: 70, y: 320, background: p.accent, color: "#fff" }
+    ];
+    return t;
+  }
 
-function heroLeftImageRight(i, p) {
-  return {
-    title: `Hero Brand #${i + 1}`,
-    canvas: { width: 1080, height: 1080, background: p.bg },
-    elements: [
-      heading("Grow Your Brand", 90, 140, 520, 96, p.primary),
-      text("Premium design built to convert", 90, 270, 460, 34, p.muted),
-      cta("Shop Now", 90, 360, p.accent),
-      image(600, 120, 380, 840)
-    ]
-  };
-}
+  function splitPromo(i, p, c, s, prompt) {
+    const t = baseTemplate("New Collection", p, c, s);
+    t.elements = [
+      { type: "background", fill: p.bg },
+      { type: "heading", text: "New Collection", x: 60, y: 160, fontSize: 54, color: p.ink },
+      { type: "text", text: prompt || "Modern layouts for brands", x: 60, y: 240, fontSize: 26, color: p.muted },
+      { type: "shape", x: 520, y: 120, width: 420, height: 420, background: p.card }
+    ];
+    return t;
+  }
 
-function fullBleedImageOverlay(i, p) {
-  return {
-    title: `Visual Impact #${i + 1}`,
-    canvas: { width: 1080, height: 1080, background: p.bg },
-    elements: [
-      image(0, 0, 1080, 1080),
-      overlay(0.45),
-      heading("Discover the Moment", 120, 420, 840, 88, p.primary, "center"),
-      text("Bold visuals. Clear message.", 120, 520, 840, 30, p.muted, "center")
-    ]
-  };
-}
+  function minimalQuote(i, p, c, s, prompt) {
+    const t = baseTemplate("Minimal Quote", p, c, s);
+    t.elements = [
+      { type: "background", fill: p.bg },
+      { type: "heading", text: prompt || "Design is intelligence made visible.", x: 120, y: 300, fontSize: 52, color: p.ink }
+    ];
+    return t;
+  }
 
-function minimalTypography(i, p) {
-  return {
-    title: `Minimal Type #${i + 1}`,
-    canvas: { width: 1080, height: 1080, background: p.bg },
-    elements: [
-      heading("Midnight Thoughts", 140, 420, 800, 104, p.primary),
-      text("A calm, modern statement.", 140, 560, 600, 32, p.muted)
-    ]
-  };
-}
+  function badgeOffer(i, p, c, s, prompt) {
+    const t = baseTemplate("Limited Offer", p, c, s);
+    t.elements = [
+      { type: "background", fill: p.bg },
+      { type: "badge", text: "LIMITED", x: 80, y: 120, background: p.accent, color: "#fff" },
+      { type: "heading", text: "Flash Sale", x: 80, y: 200, fontSize: 56, color: p.ink },
+      { type: "button", text: "Save 30%", x: 80, y: 300, background: p.accent, color: "#fff" }
+    ];
+    return t;
+  }
 
-function badgePromo(i, p) {
-  return {
-    title: `Limited Offer #${i + 1}`,
-    canvas: { width: 1080, height: 1080, background: p.bg },
-    elements: [
-      badge("LIMITED", 90, 90, p.accent),
-      heading("Flash Sale", 90, 200, 720, 96, p.primary),
-      cta("Get 30% Off", 90, 320, p.accent),
-      image(90, 420, 900, 500)
-    ]
-  };
-}
+  function editorial(i, p, c, s, prompt) {
+    const t = baseTemplate("Editorial", p, c, s);
+    t.elements = [
+      { type: "background", fill: p.bg },
+      { type: "heading", text: "Celebrate in Style", x: 200, y: 200, fontSize: 58, color: p.ink, align: "center" },
+      { type: "divider", x: 200, y: 280 },
+      { type: "text", text: prompt || "A premium announcement layout", x: 200, y: 320, fontSize: 26, color: p.muted, align: "center" }
+    ];
+    return t;
+  }
 
-function editorialAnnouncement(i, p) {
-  return {
-    title: `Editorial #${i + 1}`,
-    canvas: { width: 1080, height: 1080, background: p.bg },
-    elements: [
-      heading("Celebrate in Style", 120, 180, 840, 88, p.primary, "center"),
-      divider(120, 300, 840),
-      text("Join us for an exclusive event", 120, 340, 840, 32, p.muted, "center"),
-      cta("Reserve Spot", 420, 420, p.accent)
-    ]
-  };
-}
-
-/* ---------- ELEMENT HELPERS ---------- */
-
-function heading(text, x, y, width, size, color, align = "left") {
-  return { type: "heading", text, x, y, width, fontSize: size, fontWeight: 700, color, align };
-}
-
-function text(text, x, y, width, size, color, align = "left") {
-  return { type: "text", text, x, y, width, fontSize: size, fontWeight: 400, color, align };
-}
-
-function cta(text, x, y, color) {
-  return { type: "button", text, x, y, width: 280, height: 64, background: color, color: "#fff", radius: 999 };
-}
-
-function image(x, y, w, h) {
-  return { type: "image", x, y, width: w, height: h };
-}
-
-function badge(text, x, y, color) {
-  return { type: "badge", text, x, y, background: color, color: "#fff" };
-}
-
-function divider(x, y, w) {
-  return { type: "divider", x, y, width: w, height: 2, color: "rgba(255,255,255,.2)" };
-}
-
-function overlay(opacity) {
-  return { type: "overlay", opacity };
-}
+  Design.generateTemplates = generateTemplates;
+  window.NexoraDesign = Design;
+})();
