@@ -3,52 +3,6 @@
    No external deps. Exposes window.NexoraDesign.
 */
 (function(){
-
-/* === PHASE M: VISUAL IDENTITY INJECTION === */
-function injectVisualIdentity(t){
-  if(!t || !Array.isArray(t.elements)) return t;
-
-  // Remove excessive text blocks
-  t.elements = t.elements.filter(e => {
-    const type = String(e.type||'');
-    return !(['text','paragraph'].includes(type) && (e.fontSize||0) < 18);
-  });
-
-  // Ensure one dominant hero visual
-  const hasHero = t.elements.some(e => String(e.type).includes('hero'));
-  if(!hasHero){
-    t.elements.unshift({
-      id: 'hero_'+Math.random().toString(36).slice(2),
-      type: 'hero',
-      x: 40, y: 40, w: 900, h: 300,
-      radius: 28,
-      fill: t.bg || 'linear-gradient(135deg,#0b5fff,#7b5cff)',
-      opacity: 1
-    });
-  }
-
-  // Add abstract accent shape
-  t.elements.push({
-    id: 'accent_'+Math.random().toString(36).slice(2),
-    type: 'shape',
-    x: 680, y: 60, w: 180, h: 180,
-    radius: 999,
-    opacity: 0.18,
-    fill: 'linear-gradient(135deg,rgba(255,255,255,.6),rgba(255,255,255,0))'
-  });
-
-  // Promote image dominance if exists
-  t.elements.forEach(e=>{
-    if(String(e.type).includes('image')){
-      e.w = Math.max(e.w||0, 320);
-      e.h = Math.max(e.h||0, 240);
-      e.radius = 24;
-    }
-  });
-
-  return t;
-}
-
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
   const pick=(arr,seed)=>arr[(seed%arr.length+arr.length)%arr.length];
   const hash=(s)=>{
