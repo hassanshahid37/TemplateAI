@@ -365,17 +365,43 @@
 
 
 /* ==============================
-   Phase N — Visual Layers
+   Phase O — Visual Composition Intelligence
    ============================== */
-function addVisualLayers(template, intent) {
-  const visuals = {
-    hiring:{image:"gradient-people",shape:"glass-card"},
-    saas:{image:"gradient-tech",shape:"glass-blob"},
-    sale:{image:"gradient-sale",shape:"badge-overlay"},
-    brand:{image:"gradient-brand",shape:"soft-frame"}
+
+function applyComposition(template){
+  if(!template || !template.blocks) return template;
+
+  // Hierarchy rules
+  const title = template.blocks.find(b=>b.role==="title");
+  const subtitle = template.blocks.find(b=>b.role==="subtitle");
+  const cta = template.blocks.find(b=>b.role==="cta");
+
+  if(title){
+    title.weight = "hero";
+    title.size = "xl";
+    title.contrast = "high";
+  }
+  if(subtitle){
+    subtitle.size = "md";
+    subtitle.opacity = 0.85;
+    subtitle.spacing = "compact";
+  }
+  if(cta){
+    cta.emphasis = "primary";
+    cta.shape = "pill";
+    cta.shadow = true;
+  }
+
+  template.composition = {
+    spacing:"balanced",
+    alignment:"left",
+    flow:"Z",
+    contrast:"optimized"
   };
-  const v = visuals[intent] || visuals.brand;
-  template.visual={imageLayer:v.image,shapeLayer:v.shape,depth:true};
+
   return template;
 }
-if(typeof window!=="undefined"){window.__NEXORA_ADD_VISUALS__=addVisualLayers;}
+
+if(typeof window!=="undefined"){
+  window.__NEXORA_APPLY_COMPOSITION__ = applyComposition;
+}
