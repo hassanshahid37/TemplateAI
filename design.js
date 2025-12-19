@@ -40,202 +40,21 @@
     return { brand, tagline, keywords: words.slice(0,10) };
   }
 
-// Prompt intent detection (drives visuals)
-function intentFromPrompt(prompt){
-  const p = (prompt||"").toLowerCase();
-  const has = (...keys)=>keys.some(k=>p.includes(k));
-  if(has("hiring","we are hiring","job","career","join our team","vacancy","position","recruit","recruiting","staff")) return "hiring";
-  if(has("sale","discount","offer","limited","deal","promo","promotion","black friday","coupon","off","%")) return "sale";
-  if(has("restaurant","food","burger","pizza","cafe","coffee","menu","delivery","kitchen")) return "food";
-  if(has("gym","fitness","workout","training","yoga","coach")) return "fitness";
-  if(has("real estate","property","home","house","apartment","rent","sale house")) return "realestate";
-  if(has("app","saas","startup","software","ai","tech","product launch","launch","update")) return "tech";
-  if(has("event","webinar","workshop","conference","meetup")) return "event";
-  return "brand";
-}
 
-
-
-  // Phase H+: Smart inline "hero visuals" (no external URLs, so no 404s)
-  // Generates prompt-aware SVG scenes (people/product/objects) as data URLs.
-  function smartPhotoSrc(seed, pal, label, intent){
+  // Phase H: Smart inline "photo" blocks (no external URLs, so no 404s)
+  function smartPhotoSrc(seed, pal, label){
     const a = pal?.accent || "#4f8cff";
     const b = pal?.accent2 || "#22c55e";
     const bg = pal?.bg2 || pal?.bg || "#0b1220";
-    const ink = pal?.ink || "#ffffff";
-    const muted = pal?.muted || "rgba(255,255,255,0.72)";
     const txt = (label || "Nexora").toString().slice(0,18);
-    const mode = (intent || "brand").toLowerCase();
 
-    // Deterministic positions from seed
-    const r1 = 110 + (seed % 160);
-    const r2 = 80 + ((seed >> 3) % 170);
-    const x1 = 240 + ((seed >> 5) % 520);
-    const y1 = 220 + ((seed >> 7) % 420);
-    const x2 = 700 + ((seed >> 9) % 360);
-    const y2 = 520 + ((seed >> 11) % 300);
-
-    // Small helpers
-    const badge = (t)=>`<g transform="translate(72 78)">
-      <rect x="0" y="0" rx="18" ry="18" width="${Math.max(160, 14*t.length+88)}" height="46" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.18)"/>
-      <text x="22" y="31" font-family="Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial" font-size="20" font-weight="800" fill="${muted}" letter-spacing="1.2">${escapeXML(t.toUpperCase())}</text>
-    </g>`;
-
-    // Scene primitives per intent
-    const sceneHiring = () => {
-      // three people silhouettes + desk + chat bubble
-      const c1 = `rgba(255,255,255,0.12)`;
-      const c2 = `rgba(255,255,255,0.08)`;
-      const head = (cx,cy,r)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${c1}"/>`;
-      const body = (x,y,w,h)=>`<rect x="${x}" y="${y}" rx="${Math.round(w*0.45)}" ry="${Math.round(w*0.45)}" width="${w}" height="${h}" fill="${c2}"/>`;
-      return `
-        ${badge("Now Hiring")}
-        <g transform="translate(560 170)">
-          <rect x="0" y="0" rx="42" ry="42" width="520" height="360" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(66 84)">
-            ${head(90,64,36)}${body(54,104,72,118)}
-            ${head(220,54,40)}${body(178,102,84,138)}
-            ${head(360,68,34)}${body(330,110,64,112)}
-            <rect x="10" y="250" rx="24" ry="24" width="420" height="64" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.14)"/>
-            <rect x="40" y="266" rx="10" ry="10" width="210" height="14" fill="rgba(255,255,255,0.10)"/>
-            <rect x="40" y="292" rx="10" ry="10" width="300" height="14" fill="rgba(255,255,255,0.08)"/>
-            <g transform="translate(324 6)">
-              <rect x="0" y="0" rx="22" ry="22" width="140" height="68" fill="url(#g)" opacity="0.85"/>
-              <text x="18" y="44" font-family="Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial" font-size="18" font-weight="900" fill="#0b1020">APPLY</text>
-            </g>
-          </g>
-        </g>`;
-    };
-
-    const sceneSale = () => {
-      // product box + discount tag
-      return `
-        ${badge("Limited Offer")}
-        <g transform="translate(600 160)">
-          <rect x="0" y="0" rx="46" ry="46" width="480" height="390" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(96 70)">
-            <rect x="58" y="40" rx="26" ry="26" width="250" height="230" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.18)"/>
-            <rect x="88" y="70" rx="16" ry="16" width="190" height="170" fill="url(#g)" opacity="0.78"/>
-            <rect x="58" y="280" rx="20" ry="20" width="250" height="54" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.14)"/>
-            <text x="86" y="316" font-family="Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial" font-size="22" font-weight="900" fill="${ink}">SHOP NOW</text>
-            <g transform="translate(0 0)">
-              <path d="M0,60 L44,10 L138,10 L94,60 Z" fill="${b}" opacity="0.95"/>
-              <text x="20" y="44" font-family="Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial" font-size="16" font-weight="900" fill="#0b1020">-30%</text>
-            </g>
-          </g>
-        </g>`;
-    };
-
-    const sceneTech = () => {
-      // device + circuit lines
-      return `
-        ${badge("Product Update")}
-        <g transform="translate(600 160)">
-          <rect x="0" y="0" rx="46" ry="46" width="480" height="390" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(86 70)">
-            <rect x="70" y="30" rx="34" ry="34" width="250" height="300" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)"/>
-            <rect x="98" y="70" rx="22" ry="22" width="194" height="190" fill="url(#g)" opacity="0.70"/>
-            <rect x="120" y="278" rx="14" ry="14" width="150" height="22" fill="rgba(255,255,255,0.10)"/>
-            <circle cx="195" cy="320" r="10" fill="rgba(255,255,255,0.14)"/>
-            <path d="M0,310 C80,270 110,340 170,300 C250,246 270,330 360,288" stroke="rgba(255,255,255,0.12)" stroke-width="3" fill="none"/>
-            <circle cx="28" cy="300" r="6" fill="${a}"/><circle cx="360" cy="288" r="6" fill="${b}"/>
-          </g>
-        </g>`;
-    };
-
-    const sceneEvent = () => {
-      // ticket + calendar
-      return `
-        ${badge("Event")}
-        <g transform="translate(600 170)">
-          <rect x="0" y="0" rx="46" ry="46" width="480" height="360" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(88 84)">
-            <rect x="0" y="18" rx="28" ry="28" width="300" height="190" fill="url(#g)" opacity="0.72"/>
-            <rect x="320" y="0" rx="28" ry="28" width="140" height="220" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.16)"/>
-            <rect x="340" y="24" rx="10" ry="10" width="100" height="16" fill="rgba(255,255,255,0.12)"/>
-            <rect x="340" y="56" rx="10" ry="10" width="76" height="16" fill="rgba(255,255,255,0.10)"/>
-            <g transform="translate(340 92)">
-              ${["#","*","•","•","•","•"].map((_,i)=>`<rect x="${(i%3)*34}" y="${Math.floor(i/3)*34}" rx="10" ry="10" width="26" height="26" fill="rgba(255,255,255,0.10)"/>`).join("")}
-            </g>
-            <rect x="22" y="50" rx="12" ry="12" width="130" height="22" fill="rgba(255,255,255,0.14)"/>
-            <rect x="22" y="86" rx="12" ry="12" width="210" height="18" fill="rgba(255,255,255,0.10)"/>
-          </g>
-        </g>`;
-    };
-
-    const sceneFood = () => {
-      // plate + garnish
-      return `
-        ${badge("Fresh Menu")}
-        <g transform="translate(610 170)">
-          <rect x="0" y="0" rx="46" ry="46" width="470" height="360" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(90 74)">
-            <circle cx="180" cy="170" r="120" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.16)"/>
-            <circle cx="180" cy="170" r="86" fill="url(#g)" opacity="0.65"/>
-            <rect x="280" y="58" rx="22" ry="22" width="90" height="220" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.14)"/>
-            <rect x="20" y="44" rx="12" ry="12" width="120" height="18" fill="rgba(255,255,255,0.12)"/>
-            <rect x="20" y="74" rx="12" ry="12" width="190" height="16" fill="rgba(255,255,255,0.10)"/>
-            <circle cx="110" cy="190" r="18" fill="${b}" opacity="0.85"/>
-            <circle cx="150" cy="220" r="14" fill="${a}" opacity="0.85"/>
-          </g>
-        </g>`;
-    };
-
-    const sceneFitness = () => {
-      // dumbbell + pulse
-      return `
-        ${badge("Training")}
-        <g transform="translate(610 170)">
-          <rect x="0" y="0" rx="46" ry="46" width="470" height="360" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(92 90)">
-            <rect x="60" y="132" rx="18" ry="18" width="250" height="28" fill="rgba(255,255,255,0.12)"/>
-            <rect x="22" y="100" rx="22" ry="22" width="56" height="92" fill="url(#g)" opacity="0.78"/>
-            <rect x="310" y="100" rx="22" ry="22" width="56" height="92" fill="url(#g)" opacity="0.78"/>
-            <path d="M0,240 L80,240 L110,208 L150,276 L188,226 L222,260 L280,260"
-              stroke="rgba(255,255,255,0.14)" stroke-width="4" fill="none"/>
-            <circle cx="110" cy="208" r="6" fill="${a}"/>
-            <circle cx="150" cy="276" r="6" fill="${b}"/>
-          </g>
-        </g>`;
-    };
-
-    const sceneRealEstate = () => {
-      // house + location pin
-      return `
-        ${badge("Property")}
-        <g transform="translate(600 170)">
-          <rect x="0" y="0" rx="46" ry="46" width="480" height="360" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
-          <g transform="translate(102 86)">
-            <path d="M40,120 L190,14 L340,120" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-            <rect x="86" y="118" rx="22" ry="22" width="208" height="170" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.16)"/>
-            <rect x="166" y="188" rx="16" ry="16" width="48" height="100" fill="url(#g)" opacity="0.70"/>
-            <rect x="110" y="154" rx="12" ry="12" width="56" height="40" fill="rgba(255,255,255,0.10)"/>
-            <rect x="222" y="154" rx="12" ry="12" width="56" height="40" fill="rgba(255,255,255,0.10)"/>
-            <g transform="translate(360 40)">
-              <path d="M0,44 C0,20 18,0 44,0 C70,0 88,20 88,44 C88,86 44,128 44,128 C44,128 0,86 0,44 Z" fill="${a}" opacity="0.85"/>
-              <circle cx="44" cy="44" r="16" fill="#0b1020" opacity="0.35"/>
-            </g>
-          </g>
-        </g>`;
-    };
-
-    const sceneBrand = () => {
-      // elegant abstract blobs
-      return `
-        ${badge("Premium")}
-        <circle cx="${x1}" cy="${y1}" r="${r1}" fill="url(#g)" filter="url(#blur)" opacity="0.9"/>
-        <circle cx="${x2}" cy="${y2}" r="${r2}" fill="url(#g)" filter="url(#blur)" opacity="0.85"/>`;
-    };
-
-    let scene = "";
-    if(mode==="hiring") scene = sceneHiring();
-    else if(mode==="sale") scene = sceneSale();
-    else if(mode==="food") scene = sceneFood();
-    else if(mode==="fitness") scene = sceneFitness();
-    else if(mode==="realestate") scene = sceneRealEstate();
-    else if(mode==="event") scene = sceneEvent();
-    else if(mode==="tech") scene = sceneTech();
-    else scene = sceneBrand();
+    // Deterministic blobs from seed
+    const r1 = 120 + (seed % 140);
+    const r2 = 90 + ((seed >> 3) % 160);
+    const x1 = 260 + ((seed >> 5) % 420);
+    const y1 = 240 + ((seed >> 7) % 420);
+    const x2 = 620 + ((seed >> 9) % 360);
+    const y2 = 520 + ((seed >> 11) % 360);
 
     const svg =
 `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
@@ -244,7 +63,7 @@ function intentFromPrompt(prompt){
       <stop offset="0" stop-color="${a}" stop-opacity="0.95"/>
       <stop offset="1" stop-color="${b}" stop-opacity="0.90"/>
     </linearGradient>
-    <radialGradient id="rg" cx="0.22" cy="0.18" r="0.95">
+    <radialGradient id="rg" cx="0.25" cy="0.2" r="0.95">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
       <stop offset="1" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
@@ -256,18 +75,20 @@ function intentFromPrompt(prompt){
   <rect width="1200" height="800" fill="${bg}"/>
   <rect width="1200" height="800" fill="url(#rg)"/>
 
-  ${scene}
+  <circle cx="${x1}" cy="${y1}" r="${r1}" fill="url(#g)" filter="url(#blur)" opacity="0.9"/>
+  <circle cx="${x2}" cy="${y2}" r="${r2}" fill="url(#g)" filter="url(#blur)" opacity="0.85"/>
 
   <path d="M0,640 C240,560 360,740 600,670 C820,608 920,520 1200,590 L1200,800 L0,800 Z"
         fill="#000000" opacity="0.14"/>
 
-  <text x="64" y="742" font-family="Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="34" font-weight="800"
-        fill="#ffffff" opacity="0.72">${escapeXML(txt)}</text>
+  <text x="64" y="116" font-family="Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="64" font-weight="800"
+        fill="#ffffff" opacity="0.92">${escapeXML(txt)}</text>
+  <text x="64" y="170" font-family="Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="26" font-weight="600"
+        fill="#ffffff" opacity="0.60">Auto image • Phase H</text>
 </svg>`;
 
     return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
   }
-
 
   function escapeXML(str){
     return String(str)
@@ -291,7 +112,7 @@ function intentFromPrompt(prompt){
   }
 
   function buildElements(layout, spec){
-    const { w,h,pal,brand,tagline,seed,intent } = spec;
+    const { w,h,pal,brand,tagline,seed } = spec;
     const elements = [];
     const s = seed;
 
@@ -306,7 +127,7 @@ function intentFromPrompt(prompt){
       add({ type:"text", x:Math.round(w*0.07),y:Math.round(h*0.33), text: tagline, size:Math.round(h*0.038), weight:600, color: pal.ink });
       add({ type:"pill", x:Math.round(w*0.07),y:Math.round(h*0.72), w:Math.round(w*0.28),h:Math.round(h*0.085), r:999, fill: pal.accent, text:"Get Started", tcolor:"#0b1020", tsize:Math.round(h*0.032), tweight:800 });
       add({ type:"chip", x:Math.round(w*0.07),y:Math.round(h*0.82), text:"Premium • Fast • Ready", size:Math.round(h*0.028), color: pal.muted });
-      add({ type:"photo", src: smartPhotoSrc(s+11, pal, brand, intent), x:Math.round(w*0.60),y:Math.round(h*0.16),w:Math.round(w*0.32),h:Math.round(h*0.38), r:40, stroke:"rgba(255,255,255,0.18)" });
+      add({ type:"photo", src: smartPhotoSrc(s+11, pal, brand), x:Math.round(w*0.60),y:Math.round(h*0.16),w:Math.round(w*0.32),h:Math.round(h*0.38), r:40, stroke:"rgba(255,255,255,0.18)" });
     }
 
     if(layout==="badgePromo"){
@@ -357,7 +178,7 @@ function intentFromPrompt(prompt){
 
     if(layout==="photoCard"){
       add({ type:"shape", x:Math.round(w*0.08),y:Math.round(h*0.12),w:Math.round(w*0.84),h:Math.round(h*0.76), r:50, fill:"rgba(255,255,255,0.04)", stroke:"rgba(255,255,255,0.12)" });
-      add({ type:"photo", src: smartPhotoSrc(s+37, pal, brand, intent), x:Math.round(w*0.58),y:Math.round(h*0.18),w:Math.round(w*0.30),h:Math.round(h*0.40), r:42, stroke:"rgba(255,255,255,0.18)" });
+      add({ type:"photo", src: smartPhotoSrc(s+37, pal, brand), x:Math.round(w*0.58),y:Math.round(h*0.18),w:Math.round(w*0.30),h:Math.round(h*0.40), r:42, stroke:"rgba(255,255,255,0.18)" });
       add({ type:"text", x:Math.round(w*0.14),y:Math.round(h*0.22), text: brand, size:Math.round(h*0.06), weight:900, color: pal.ink });
       add({ type:"text", x:Math.round(w*0.14),y:Math.round(h*0.31), text: pick(["Grow your brand","Creative studio","Premium design","New launch","Build momentum","Meet your goals"], s), size:Math.round(h*0.075), weight:900, color: pal.ink, letter:-1 });
       add({ type:"text", x:Math.round(w*0.14),y:Math.round(h*0.44), text: tagline, size:Math.round(h*0.032), weight:650, color: pal.muted });
@@ -373,7 +194,6 @@ function intentFromPrompt(prompt){
     const seed = (hash(category+"|"+style+"|"+prompt) + idx*1013) >>> 0;
     const pal = pick(PALETTES, seed);
     const b = brandFromPrompt(prompt);
-    const intent = intentFromPrompt(prompt);
     const arch = archetype(seed);
 
     const titleByCategory = {
@@ -393,8 +213,7 @@ function intentFromPrompt(prompt){
       w: meta.w, h: meta.h, pal,
       brand: b.brand || "Nexora",
       tagline: b.tagline || "Premium templates, fast.",
-      seed,
-      intent
+      seed
     });
 
     return {
@@ -543,3 +362,37 @@ function intentFromPrompt(prompt){
 
   window.NexoraDesign = { CATEGORIES, generateTemplates, renderPreview };
 })();
+
+// === VISUAL ENHANCEMENT PATCH ===
+
+// Adds visual diversity based on prompt intent without blocking UI
+function applyVisualTheme(template, index, prompt) {
+  const themes = [
+    { bg: 'linear-gradient(135deg,#0f2027,#203a43,#2c5364)', accent:'#00d4ff' },
+    { bg: 'linear-gradient(135deg,#1f1c2c,#928dab)', accent:'#ffb703' },
+    { bg: 'linear-gradient(135deg,#232526,#414345)', accent:'#21e6c1' },
+    { bg: 'linear-gradient(135deg,#141e30,#243b55)', accent:'#f72585' }
+  ];
+  const t = themes[index % themes.length];
+  template.style = template.style || {};
+  template.style.background = t.bg;
+  template.style.accent = t.accent;
+  template.style.visual = true;
+
+  if (prompt && /hire|hiring|job/i.test(prompt)) {
+    template.badge = 'WE ARE HIRING';
+    template.cta = template.cta || 'Apply Now';
+  }
+  if (prompt && /sale|offer|discount/i.test(prompt)) {
+    template.badge = 'LIMITED';
+    template.cta = template.cta || 'Shop Now';
+  }
+  return template;
+}
+
+// Hook into existing generation result if present
+if (typeof window !== 'undefined') {
+  window.__applyVisuals = function(templates, prompt){
+    return templates.map((t,i)=>applyVisualTheme(t,i,prompt));
+  }
+}
