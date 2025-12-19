@@ -4,25 +4,35 @@
 */
 (function(){
 
-/* === PHASE K COMPOSITION === */
-function composeTemplate(elements){
-  if(!Array.isArray(elements)) return elements;
-  // keep strongest 6 elements max
-  const kept = elements.slice(0,6);
-  // find headline
-  const h = kept.find(e=>['heading','text'].includes(String(e.type)) && (e.fontSize||0)>=40) || kept[0];
-  if(h){
-    h.fontSize = Math.max(h.fontSize||48, 56);
-    h.fontWeight = 800;
+/* === PHASE L: INTERNAL QUALITY FILTER (no UI changes) === */
+function scoreTemplate(t){
+  const els = Array.isArray(t.elements) ? t.elements : [];
+  let score = 0;
+  // hierarchy: big headline present
+  const headline = els.find(e => (e.fontSize||0) >= 48);
+  if(headline) score += 30;
+  // balance: not too many elements
+  const n = els.length;
+  score += Math.max(0, 20 - Math.abs(n - 5)*4);
+  // CTA presence but not dominant
+  const cta = els.find(e => String(e.type||'').includes('cta'));
+  if(cta) score += 10;
+  // spacing proxy: varied sizes
+  const sizes = els.map(e=>e.fontSize||0).filter(Boolean);
+  if(sizes.length>=2){
+    const spread = Math.max(...sizes) - Math.min(...sizes);
+    score += Math.min(20, spread/2);
   }
-  // CTA smaller than headline
-  kept.forEach(e=>{
-    if(String(e.type).includes('cta')){
-      e.fontSize = Math.min(e.fontSize||20, 22);
-      e.fontWeight = 700;
-    }
-  });
-  return kept;
+  // image-led or text-led clarity
+  const img = els.find(e => ['image','photo'].includes(String(e.type||'')));
+  if(img || headline) score += 10;
+  return score;
+}
+
+function selectBest(templates, keepN){
+  const scored = templates.map(t=>({t, s: scoreTemplate(t)}));
+  scored.sort((a,b)=>b.s-a.s);
+  return scored.slice(0, keepN).map(x=>x.t);
 }
 
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
@@ -384,3 +394,5 @@ function composeTemplate(elements){
 
   window.NexoraDesign = { CATEGORIES, generateTemplates, renderPreview };
 })();
+// Phase L guard
+var requestedCount = null;
