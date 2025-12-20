@@ -365,49 +365,56 @@
 
 
 /* ==============================
-   Phase Y — Expressive Color + Depth Intelligence
+   Phase Z — Market-Specific Polish
    ============================== */
 
-// Expanded color engine (Phase U revival)
-const EXPRESSIVE_PALETTES = [
-  {bg:"linear-gradient(135deg,#0b1020,#1a4fff)",accent:"#4f7cff",cta:"#6df2c2"},
-  {bg:"linear-gradient(135deg,#2b1055,#7597de)",accent:"#ff9ff3",cta:"#feca57"},
-  {bg:"linear-gradient(135deg,#021024,#052659)",accent:"#1ad7c0",cta:"#1ad7c0"},
-  {bg:"linear-gradient(135deg,#1f4037,#99f2c8)",accent:"#0fb9b1",cta:"#26de81"}
-];
-
-function applyExpressiveColors(template){
+function applyMarketPolish(template){
   if(!template) return template;
-  const palette = EXPRESSIVE_PALETTES[Math.floor(Math.random()*EXPRESSIVE_PALETTES.length)];
-  template.background = palette.bg;
-  template.expressivePalette = palette;
 
+  // Typography rhythm
+  template.typography = {
+    headlineWeight: "700",
+    bodyWeight: "400",
+    letterSpacing: "0.2px",
+    lineHeight: "1.25"
+  };
+
+  // CTA confidence
   if(template.blocks){
-    template.blocks = template.blocks.map(b=>{
-      if(b.role==="title"){
-        return {...b,color:palette.accent,emphasis:(b.emphasis||2)+1,glow:true};
+    template.blocks = template.blocks.map(b => {
+      if(b.role === "cta"){
+        return {
+          ...b,
+          textTransform: "uppercase",
+          emphasis: (b.emphasis || 2) + 1,
+          padding: "12px 20px"
+        };
       }
-      if(b.role==="cta"){
-        return {...b,color:palette.cta,emphasis:(b.emphasis||2)+1,shadow:true};
+      if(b.role === "title"){
+        return {
+          ...b,
+          maxLines: 2
+        };
       }
       return b;
     });
   }
-  return template;
-}
 
-// Depth & polish layer (from Phase X)
-function applyDepth(template){
-  if(!template) return template;
-  template.depth = {
-    texture:true,
-    glow:true,
-    shadow:"soft"
+  // Market-ready spacing
+  template.spacing = {
+    cardPadding: "20px",
+    blockGap: "12px",
+    safeArea: true
   };
+
+  template.polish = {
+    market: "instagram",
+    confidence: "high"
+  };
+
   return template;
 }
 
-if(typeof window!=="undefined"){
-  window.__NEXORA_PHASE_Y_COLORS__ = applyExpressiveColors;
-  window.__NEXORA_PHASE_Y_DEPTH__ = applyDepth;
+if(typeof window !== "undefined"){
+  window.__NEXORA_PHASE_Z__ = applyMarketPolish;
 }
