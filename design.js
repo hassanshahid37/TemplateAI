@@ -89,83 +89,6 @@
 
     return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
   }
-/* ------------------------------
-   Phase X — Visual Depth & Texture
-   - Adds subtle overlays + glow shapes for more "Canva-level" richness
-   - Does NOT change UI, only element generation
---------------------------------- */
-
-function fxPatternOverlay(pal, seed){
-  // Soft dots + diagonal sheen. Kept very low opacity.
-  const a = pal.accent || "#4aa3ff";
-  const b = pal.accent2 || pal.card || "#7c5cff";
-  const dot = `radial-gradient(circle at 20% 25%, ${a}22 0 2px, transparent 3px),
-               radial-gradient(circle at 70% 65%, ${b}22 0 2px, transparent 3px),
-               radial-gradient(circle at 40% 80%, ${a}18 0 2px, transparent 3px)`;
-  const sheen = `linear-gradient(${Math.floor(rand(seed+41)*360)}deg, transparent 0%, rgba(255,255,255,.06) 35%, transparent 70%)`;
-  const grain = `repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 3px)`;
-  return `${sheen}, ${dot}, ${grain}`;
-}
-
-function fxGlowFrom(pal, seed){
-  const a = pal.accent || "#4aa3ff";
-  const b = pal.accent2 || pal.card || "#7c5cff";
-  const ang = Math.floor(rand(seed+77)*360);
-  return `radial-gradient(closest-side at 35% 35%, ${a}55 0%, transparent 60%),
-          radial-gradient(closest-side at 75% 65%, ${b}44 0%, transparent 62%),
-          linear-gradient(${ang}deg, ${a}22 0%, transparent 55%, ${b}18 100%)`;
-}
-
-function phaseXEnhanceElements(elements, layout, pal, seed){
-  const out = Array.isArray(elements) ? elements.slice() : [];
-  // 1) Full-canvas overlay texture (very subtle)
-  out.unshift({
-    type:"shape",
-    x:0, y:0, w:100, h:100,
-    radius:22,
-    fill: fxPatternOverlay(pal, seed),
-    opacity: 0.10,
-    stroke: "transparent",
-    shadow: "none"
-  });
-
-  // 2) Title glow (find title element and insert glow behind it)
-  const titleIdx = out.findIndex(e => e && e.type==="text" && (e.role==="title" || (typeof e.text==="string" && e.text.length>=8)));
-  if(titleIdx > -1){
-    const t = out[titleIdx];
-    const gx = clamp((t.x ?? 8) - 4, 0, 90);
-    const gy = clamp((t.y ?? 10) - 6, 0, 90);
-    const gw = clamp((t.w ?? 70) + 10, 20, 100);
-    const gh = clamp((t.h ?? 22) + 14, 14, 60);
-
-    out.splice(titleIdx, 0, {
-      type:"shape",
-      x: gx, y: gy, w: gw, h: gh,
-      radius: 24,
-      fill: fxGlowFrom(pal, seed),
-      opacity: 0.22,
-      stroke: "transparent",
-      shadow: `0 24px 80px rgba(0,0,0,.35)`
-    });
-
-    // Slightly bump title weight/size for hierarchy (safe caps)
-    if(typeof t.size === "number") t.size = clamp(t.size + 2, 16, 54);
-    if(typeof t.weight === "number") t.weight = clamp(t.weight + 50, 500, 800);
-  }
-
-  // 3) CTA polish (if a button exists, give it a richer fill)
-  for(const el of out){
-    if(!el) continue;
-    if(el.type==="button" || el.type==="pill"){
-      const a = pal.accent || "#4aa3ff";
-      const b = pal.accent2 || pal.card || "#7c5cff";
-      const ang = Math.floor(rand(seed+99)*360);
-      el.fill = `linear-gradient(${ang}deg, ${a} 0%, ${b} 100%)`;
-      if(!el.shadow) el.shadow = "0 12px 30px rgba(0,0,0,.35)";
-    }
-  }
-  return out;
-}
 
   function escapeXML(str){
     return String(str)
@@ -263,7 +186,7 @@ function phaseXEnhanceElements(elements, layout, pal, seed){
       add({ type:"chip", x:Math.round(w*0.14),y:Math.round(h*0.71), text:"@"+brand.replace(/\s+/g,"").toLowerCase(), size:Math.round(h*0.028), color: pal.muted });
     }
 
-    return phaseXEnhanceElements(elements, layout, pal, seed);
+    return elements;
   }
 
   function generateOne(category, prompt, style, idx){
@@ -442,45 +365,49 @@ function phaseXEnhanceElements(elements, layout, pal, seed){
 
 
 /* ==============================
-   Phase Q — Layout Mutation Engine
+   Phase Y — Expressive Color + Depth Intelligence
    ============================== */
 
-function mutateLayout(template){
-  if(!template || !template.blocks) return template;
+// Expanded color engine (Phase U revival)
+const EXPRESSIVE_PALETTES = [
+  {bg:"linear-gradient(135deg,#0b1020,#1a4fff)",accent:"#4f7cff",cta:"#6df2c2"},
+  {bg:"linear-gradient(135deg,#2b1055,#7597de)",accent:"#ff9ff3",cta:"#feca57"},
+  {bg:"linear-gradient(135deg,#021024,#052659)",accent:"#1ad7c0",cta:"#1ad7c0"},
+  {bg:"linear-gradient(135deg,#1f4037,#99f2c8)",accent:"#0fb9b1",cta:"#26de81"}
+];
 
-  const blocks = [...template.blocks];
+function applyExpressiveColors(template){
+  if(!template) return template;
+  const palette = EXPRESSIVE_PALETTES[Math.floor(Math.random()*EXPRESSIVE_PALETTES.length)];
+  template.background = palette.bg;
+  template.expressivePalette = palette;
 
-  function shuffle(arr){
-    for(let i = arr.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
+  if(template.blocks){
+    template.blocks = template.blocks.map(b=>{
+      if(b.role==="title"){
+        return {...b,color:palette.accent,emphasis:(b.emphasis||2)+1,glow:true};
+      }
+      if(b.role==="cta"){
+        return {...b,color:palette.cta,emphasis:(b.emphasis||2)+1,shadow:true};
+      }
+      return b;
+    });
   }
-
-  const title = blocks.filter(b=>b.role==="title");
-  const subtitle = blocks.filter(b=>b.role==="subtitle");
-  const badge = blocks.filter(b=>b.role==="badge");
-  const cta = blocks.filter(b=>b.role==="cta");
-  const rest = blocks.filter(b=>!["title","subtitle","badge","cta"].includes(b.role));
-
-  const patterns = [
-    () => [...badge, ...title, ...subtitle, ...rest, ...cta],
-    () => [...title, ...badge, ...rest, ...subtitle, ...cta],
-    () => [...rest, ...title, ...subtitle, ...cta, ...badge],
-    () => [...title, ...cta, ...subtitle, ...rest, ...badge],
-    () => shuffle([...blocks])
-  ];
-
-  const pattern = patterns[Math.floor(Math.random()*patterns.length)];
-  template.blocks = pattern();
-
-  template.layoutVariant = Math.floor(Math.random()*patterns.length);
-  template.structure = template.blocks.map(b=>b.role);
-
   return template;
 }
 
-if(typeof window !== "undefined"){
-  window.__NEXORA_MUTATE_LAYOUT__ = mutateLayout;
+// Depth & polish layer (from Phase X)
+function applyDepth(template){
+  if(!template) return template;
+  template.depth = {
+    texture:true,
+    glow:true,
+    shadow:"soft"
+  };
+  return template;
+}
+
+if(typeof window!=="undefined"){
+  window.__NEXORA_PHASE_Y_COLORS__ = applyExpressiveColors;
+  window.__NEXORA_PHASE_Y_DEPTH__ = applyDepth;
 }
