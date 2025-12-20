@@ -365,43 +365,30 @@
 
 
 /* ==============================
-   Phase R — Hierarchy Intelligence
+   Phase S — Inline Visuals (No Assets)
    ============================== */
 
-function applyHierarchy(template){
-  if(!template || !template.blocks) return template;
+function applyInlineVisuals(template){
+  if(!template) return template;
 
-  const intent = (template.intent || "").toLowerCase();
-
-  let hierarchyMap = {
-    title: 3,
-    badge: 2,
-    subtitle: 2,
-    cta: 1
+  template.inlineVisual = {
+    type: "gradient+svg",
+    background: template.style?.background || "linear-gradient(135deg,#0b5fff,#7b5cff)",
+    svg: `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,.35)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="200" height="120" fill="url(#g)"/>
+      <circle cx="150" cy="20" r="60" fill="rgba(255,255,255,.18)"/>
+    </svg>`
   };
 
-  if(intent.includes("hire") || intent.includes("career")){
-    hierarchyMap = { title: 3, cta: 3, badge: 2, subtitle: 1 };
-  } else if(intent.includes("sale") || intent.includes("offer")){
-    hierarchyMap = { badge: 3, title: 3, cta: 2, subtitle: 1 };
-  } else if(intent.includes("brand") || intent.includes("launch")){
-    hierarchyMap = { title: 3, subtitle: 3, badge: 1, cta: 1 };
-  }
-
-  template.blocks = template.blocks.map(b => {
-    const weight = hierarchyMap[b.role] || 1;
-    return {
-      ...b,
-      emphasis: weight,
-      scale: 1 + weight * 0.08,
-      opacity: 1 - (3 - weight) * 0.08
-    };
-  });
-
-  template.hierarchy = hierarchyMap;
   return template;
 }
 
-if(typeof window !== "undefined"){
-  window.__NEXORA_HIERARCHY__ = applyHierarchy;
+if(typeof window!=="undefined"){
+  window.__NEXORA_INLINE_VISUALS__ = applyInlineVisuals;
 }
