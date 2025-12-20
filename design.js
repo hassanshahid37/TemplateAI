@@ -416,3 +416,21 @@ function applySceneBuilder(template){
 if(typeof window !== "undefined"){
   window.__NEXORA_PHASE_AB_SCENE__ = applySceneBuilder;
 }
+
+
+// === Phase AC: Asset Intelligence ===
+function assignAssetZones(template){
+  const zones = {
+    hero: { type: "image", importance: "high" },
+    product: { type: "image", importance: "medium" },
+    textSafe: { type: "text", importance: "high" },
+    accent: { type: "shape", importance: "low" }
+  };
+  template.assetZones = zones;
+  template.layoutStyle = ["poster","split","centered"][Math.floor(Math.random()*3)];
+  return template;
+}
+
+if (Array.isArray(window.templates)) {
+  window.templates = window.templates.map(t => assignAssetZones(t));
+}
