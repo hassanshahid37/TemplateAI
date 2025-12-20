@@ -365,45 +365,43 @@
 
 
 /* ==============================
-   Phase Q — Layout Mutation Engine
+   Phase R — Hierarchy Intelligence
    ============================== */
 
-function mutateLayout(template){
+function applyHierarchy(template){
   if(!template || !template.blocks) return template;
 
-  const blocks = [...template.blocks];
+  const intent = (template.intent || "").toLowerCase();
 
-  function shuffle(arr){
-    for(let i = arr.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
+  let hierarchyMap = {
+    title: 3,
+    badge: 2,
+    subtitle: 2,
+    cta: 1
+  };
+
+  if(intent.includes("hire") || intent.includes("career")){
+    hierarchyMap = { title: 3, cta: 3, badge: 2, subtitle: 1 };
+  } else if(intent.includes("sale") || intent.includes("offer")){
+    hierarchyMap = { badge: 3, title: 3, cta: 2, subtitle: 1 };
+  } else if(intent.includes("brand") || intent.includes("launch")){
+    hierarchyMap = { title: 3, subtitle: 3, badge: 1, cta: 1 };
   }
 
-  const title = blocks.filter(b=>b.role==="title");
-  const subtitle = blocks.filter(b=>b.role==="subtitle");
-  const badge = blocks.filter(b=>b.role==="badge");
-  const cta = blocks.filter(b=>b.role==="cta");
-  const rest = blocks.filter(b=>!["title","subtitle","badge","cta"].includes(b.role));
+  template.blocks = template.blocks.map(b => {
+    const weight = hierarchyMap[b.role] || 1;
+    return {
+      ...b,
+      emphasis: weight,
+      scale: 1 + weight * 0.08,
+      opacity: 1 - (3 - weight) * 0.08
+    };
+  });
 
-  const patterns = [
-    () => [...badge, ...title, ...subtitle, ...rest, ...cta],
-    () => [...title, ...badge, ...rest, ...subtitle, ...cta],
-    () => [...rest, ...title, ...subtitle, ...cta, ...badge],
-    () => [...title, ...cta, ...subtitle, ...rest, ...badge],
-    () => shuffle([...blocks])
-  ];
-
-  const pattern = patterns[Math.floor(Math.random()*patterns.length)];
-  template.blocks = pattern();
-
-  template.layoutVariant = Math.floor(Math.random()*patterns.length);
-  template.structure = template.blocks.map(b=>b.role);
-
+  template.hierarchy = hierarchyMap;
   return template;
 }
 
 if(typeof window !== "undefined"){
-  window.__NEXORA_MUTATE_LAYOUT__ = mutateLayout;
+  window.__NEXORA_HIERARCHY__ = applyHierarchy;
 }
