@@ -188,6 +188,139 @@
 
     return elements;
   }
+  // ==============================
+  // Phase Z+ — Visual Primitives Engine (alive, not templated)
+  // Responsibility: add *small*, controlled visual expressiveness using primitives only
+  // (no UI changes; safe defaults; never removes content)
+  // ==============================
+
+  function _zplusMood(prompt){
+    const p = (prompt||"").toLowerCase();
+    const has = (w)=>p.includes(w);
+    return {
+      pride: has("proud") || has("pakistan") || has("nation") || has("heritage") || has("unity"),
+      energy: has("sale") || has("discount") || has("limited") || has("flash") || has("drop") || has("now"),
+      community: has("join") || has("team") || has("community") || has("together") || has("family"),
+      tech: has("ai") || has("startup") || has("saas") || has("app") || has("crypto") || has("fintech"),
+      gaming: has("game") || has("gaming") || has("match") || has("battle") || has("epic") || has("rank"),
+      luxury: has("luxury") || has("premium") || has("exclusive") || has("elite") || has("signature"),
+    };
+  }
+
+  function applyZPlusExpressiveness(tpl, ctx){
+    try{
+      if(!tpl || !Array.isArray(tpl.elements)) return tpl;
+      const prompt = (ctx && ctx.prompt) || "";
+      const mood = _zplusMood(prompt);
+      const pal = tpl.palette || {};
+      const accent = pal.accent || "#3b82f6";
+      const accent2 = pal.accent2 || accent;
+      const ink = pal.ink || "#eaf2ff";
+      const bg = pal.bg || "#0b1220";
+
+      // Insert helpers
+      const els = tpl.elements.slice();
+
+      const findAfterBgIndex = ()=>{
+        const i = els.findIndex(e=>e && e.type==="bg");
+        return i>=0 ? i+1 : 0;
+      };
+
+      const pushBehindContent = (e)=>{
+        const at = findAfterBgIndex();
+        els.splice(at, 0, e);
+      };
+
+      const safeOpacity = (n)=>Math.max(0, Math.min(1, n));
+
+      // 1) A subtle "dominant color band" or "glow pane" to avoid flatness
+      // (kept very low opacity so it won't ruin templates)
+      pushBehindContent({
+        type:"shape",
+        x: 18,
+        y: mood.gaming ? 22 : 28,
+        w: tpl.canvas?.w ? Math.max(120, tpl.canvas.w - 36) : 580,
+        h: mood.energy ? 86 : 72,
+        r: 18,
+        fill: accent,
+        opacity: mood.energy ? 0.12 : 0.08
+      });
+
+      // 2) Add a secondary accent chip / badge if the template already has a CTA area
+      // We do NOT assume exact layout; we place a small chip in a safe corner.
+      const chipText = mood.pride ? "PROUD" : (mood.energy ? "LIMITED" : (mood.community ? "JOIN" : (mood.tech ? "NEW" : (mood.gaming ? "PLAY" : "FEATURE"))));
+      pushBehindContent({
+        type:"chip",
+        x: (tpl.canvas?.w || 600) - 140,
+        y: 22,
+        text: chipText,
+        fill: accent2,
+        ink: "#061018",
+        opacity: safeOpacity(mood.energy ? 0.95 : 0.85)
+      });
+
+      // 3) Add micro-detail: dots pattern (alive feel) — only a few, low opacity
+      if(mood.gaming || mood.tech || mood.energy){
+        els.push({
+          type:"dots",
+          x: (tpl.canvas?.w || 600) - 170,
+          y: (tpl.canvas?.h || 600) - 150,
+          w: 130,
+          h: 90,
+          color: ink,
+          opacity: mood.energy ? 0.22 : 0.16
+        });
+      }
+
+      // 4) Typography micro-polish: boost hierarchy without changing UI
+      for(const e of els){
+        if(!e || e.type!=="text") continue;
+
+        const t = (e.text||"").toString();
+        const isTitleLike = (e.size||0) >= 30;
+        const isSubtitleLike = (e.size||0) >= 16 && (e.size||0) <= 24;
+
+        if(isTitleLike){
+          // Slightly tighten/expand depending on mood
+          if(mood.luxury){
+            e.weight = Math.min(700, (e.weight||700));
+            e.opacity = safeOpacity((e.opacity ?? 1) * 0.96);
+          } else if(mood.energy || mood.gaming){
+            e.weight = Math.max(700, (e.weight||700));
+          }
+
+          if(mood.pride || mood.community){
+            // Make short titles feel like a banner without fully uppercasing long text
+            if(t.length <= 24) e.text = t.toUpperCase();
+          }
+        }
+
+        if(isSubtitleLike && (mood.energy || mood.gaming)){
+          e.opacity = safeOpacity((e.opacity ?? 1) * 0.92);
+        }
+      }
+
+      // 5) Emotional tone: add a calm gradient panel for pride/community prompts
+      if(mood.pride || mood.community){
+        pushBehindContent({
+          type:"rect",
+          x: 18,
+          y: (tpl.canvas?.h || 600) - 150,
+          w: tpl.canvas?.w ? Math.max(120, tpl.canvas.w - 36) : 580,
+          h: 120,
+          r: 18,
+          fill: bg,
+          opacity: 0.35
+        });
+      }
+
+      tpl.elements = els;
+      return tpl;
+    }catch(err){
+      return tpl;
+    }
+  }
+
 
   function generateOne(category, prompt, style, idx){
     const meta = CATEGORIES[category] || CATEGORIES["Instagram Post"];
@@ -216,7 +349,7 @@
       seed
     });
 
-    return {
+    const tpl = {
       id: "tpl_"+seed.toString(16)+"_"+idx,
       title: titleByCategory[category] || (category+" #"+(idx+1)),
       subtitle,
@@ -227,6 +360,9 @@
       palette: pal,
       elements
     };
+
+    // Apply Phase Z+ expressiveness (safe primitives only)
+    return applyZPlusExpressiveness(tpl, { prompt, idx, style, category });
   }
 
   function generateTemplates(opts){
@@ -364,48 +500,3 @@
 })();
 
 
-/* ==============================
-   Phase Z+ — Controlled Expressiveness Layer
-   ============================== */
-
-function applyZPlusExpressiveness(template){
-  if(!template || !template.blocks) return template;
-
-  // Detect emotional keywords for subtle emphasis
-  const textBlob = (template.title || "") + " " + (template.subtitle || "");
-  const lower = textBlob.toLowerCase();
-
-  let emphasisTone = "neutral";
-  if(lower.includes("proud") || lower.includes("together")) emphasisTone = "pride";
-  if(lower.includes("game") || lower.includes("battle")) emphasisTone = "energy";
-  if(lower.includes("grow") || lower.includes("future")) emphasisTone = "aspiration";
-
-  template.zPlus = {
-    tone: emphasisTone,
-    enabled: true
-  };
-
-  template.blocks = template.blocks.map(b => {
-    if(b.role === "title"){
-      return {
-        ...b,
-        letterSpacing: emphasisTone === "pride" ? "0.4px" : "0.2px",
-        transform: emphasisTone === "energy" ? "uppercase" : "none"
-      };
-    }
-    if(b.role === "cta"){
-      return {
-        ...b,
-        glow: emphasisTone !== "neutral",
-        confidence: emphasisTone
-      };
-    }
-    return b;
-  });
-
-  return template;
-}
-
-if(typeof window !== "undefined"){
-  window.__NEXORA_PHASE_Z_PLUS__ = applyZPlusExpressiveness;
-}
