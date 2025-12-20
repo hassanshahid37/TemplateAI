@@ -365,64 +365,40 @@
 
 
 /* ==============================
-   Phase V — Asset Injection Intelligence
+   Phase W — Brand Color & Hierarchy Intelligence
    ============================== */
 
-// Detect intent from prompt or template metadata
-function inferAssetIntent(template){
-  const t = (template.intent || template.title || "").toLowerCase();
-  if(t.includes("hire") || t.includes("career")) return "people";
-  if(t.includes("sale") || t.includes("offer")) return "promo";
-  if(t.includes("fashion")) return "fashion";
-  if(t.includes("real estate") || t.includes("home")) return "property";
-  if(t.includes("saas") || t.includes("software")) return "saas";
-  return "abstract";
-}
-
-// Inline SVG asset library (zero network requests)
-const INLINE_ASSETS = {
-  people: () => `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
-    <rect width="300" height="180" fill="url(#g)"/>
-    <circle cx="90" cy="80" r="26" fill="rgba(255,255,255,.6)"/>
-    <circle cx="150" cy="70" r="22" fill="rgba(255,255,255,.5)"/>
-    <circle cx="210" cy="85" r="24" fill="rgba(255,255,255,.55)"/>
-  </svg>`,
-  promo: () => `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
-    <rect width="300" height="180" fill="rgba(255,255,255,.08)"/>
-    <polygon points="0,140 300,60 300,180 0,180" fill="rgba(255,255,255,.18)"/>
-  </svg>`,
-  saas: () => `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
-    <rect width="300" height="180" rx="18" fill="rgba(255,255,255,.12)"/>
-    <rect x="30" y="40" width="240" height="18" rx="6" fill="rgba(255,255,255,.4)"/>
-    <rect x="30" y="70" width="180" height="14" rx="6" fill="rgba(255,255,255,.25)"/>
-  </svg>`,
-  property: () => `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
-    <rect width="300" height="180" fill="rgba(255,255,255,.1)"/>
-    <polygon points="150,40 240,100 60,100" fill="rgba(255,255,255,.45)"/>
-    <rect x="90" y="100" width="120" height="60" fill="rgba(255,255,255,.3)"/>
-  </svg>`,
-  abstract: () => `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="60" cy="50" r="40" fill="rgba(255,255,255,.25)"/>
-    <circle cx="200" cy="120" r="60" fill="rgba(255,255,255,.18)"/>
-  </svg>`
+const BRAND_PALETTES = {
+  tech:{bg:"linear-gradient(135deg,#0b1020,#0b5fff)",accent:"#0b5fff",cta:"#00d1ff"},
+  lifestyle:{bg:"linear-gradient(135deg,#2a0845,#6441a5)",accent:"#ff7ad9",cta:"#ffd166"},
+  business:{bg:"linear-gradient(135deg,#0f2027,#203a43)",accent:"#21e6c1",cta:"#21e6c1"},
+  generic:{bg:"linear-gradient(135deg,#050712,#14162b)",accent:"#7b5cff",cta:"#7b5cff"}
 };
 
-// Inject assets into templates
-function injectAssets(template){
-  if(!template) return template;
+function inferBrandType(template){
+  const t=(template.intent||template.title||"").toLowerCase();
+  if(t.includes("saas")||t.includes("tech"))return"tech";
+  if(t.includes("life")||t.includes("people"))return"lifestyle";
+  if(t.includes("business")||t.includes("company"))return"business";
+  return"generic";
+}
 
-  const intent = inferAssetIntent(template);
-  const svg = INLINE_ASSETS[intent] ? INLINE_ASSETS[intent]() : INLINE_ASSETS.abstract();
-
-  template.asset = {
-    type: "inline-svg",
-    svg,
-    intent
-  };
-
+function applyBrandColors(template){
+  if(!template)return template;
+  const brand=inferBrandType(template);
+  const p=BRAND_PALETTES[brand]||BRAND_PALETTES.generic;
+  template.brand={type:brand,palette:p};
+  if(template.blocks){
+    template.blocks=template.blocks.map(b=>{
+      if(b.role==="title")return{...b,color:p.accent,emphasis:(b.emphasis||2)+1};
+      if(b.role==="cta")return{...b,color:p.cta,emphasis:(b.emphasis||2)+1};
+      return b;
+    });
+  }
+  template.background=p.bg;
   return template;
 }
 
-if(typeof window !== "undefined"){
-  window.__NEXORA_INJECT_ASSETS__ = injectAssets;
+if(typeof window!=="undefined"){
+  window.__NEXORA_BRAND_COLORS__=applyBrandColors;
 }
