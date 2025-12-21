@@ -1,4 +1,5 @@
 
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -344,8 +345,9 @@
 
     // Elements mapping
     const els = Array.isArray(tpl.elements) ? tpl.elements : [];
-    const heading = list.find(e => ["heading","subhead"].includes(String(e.type||"").toLowerCase()))
-        || list.find(e => String(e.type||"").toLowerCase()==="text" && (Number(e.weight||0) >= 800 || Number(e.size||0) >= 46));
+    // FIX: use the correct local list variable (was `list` which caused ReferenceError)
+    const heading = els.find(e => ["heading","subhead"].includes(String(e.type||"").toLowerCase()))
+        || els.find(e => String(e.type||"").toLowerCase()==="text" && (Number(e.weight||0) >= 800 || Number(e.size||0) >= 46));
     if(heading) heading.title = p.slice(0, 60);
 
     const body = els.find(e => String(e.type||"").toLowerCase()==="text");
@@ -803,10 +805,17 @@ currentStyle = "Dark Premium";
     };
 
     try {
+
+// === AE-3: instant local templates + async AI copy (no UI changes) ===
+// 1) Show high-quality client-side templates immediately (design.js).
+// 2) In background, fetch AI copy-only improvements and merge into existing templates.
+seedTemplates(payload.count);
+statusEl.textContent = "Generating (instant)…";
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, mode: "copy" })
       });
 
       const data = await res.json();
@@ -815,6 +824,48 @@ currentStyle = "Dark Premium";
       // ✅ MINIMAL FIX: connect AI result to the existing renderer
       // Render AI templates into the grid
       const templates = Array.isArray(data?.templates) ? data.templates : [];
+
+// AE-3 merge: apply AI copy to the already-rendered client templates (keep visuals)
+if(Array.isArray(__lastTemplates) && __lastTemplates.length){
+  templates.forEach((ai, i) => {
+    const t = __lastTemplates[i];
+    if(!t) return;
+    if(ai?.title) t.title = String(ai.title);
+    if(ai?.description) t.description = String(ai.description);
+    // Update a few text elements for stronger previews (non-destructive)
+    if(Array.isArray(t.elements)){
+      for(const el of t.elements){
+        const kind = String(el.type||"").toLowerCase();
+        if(kind.includes("title") || kind==="text"){
+          if(ai?.title) el.title = String(ai.title);
+        }
+        if(kind.includes("subtitle") || kind.includes("caption")){
+          if(ai?.description) el.title = String(ai.description);
+        }
+        if(kind.includes("cta") || kind.includes("button")){
+          if(ai?.cta) el.title = String(ai.cta);
+        }
+        if(kind.includes("badge") || kind.includes("tag")){
+          if(ai?.badge) el.title = String(ai.badge);
+        }
+      }
+    }
+  });
+
+  // Re-render only the tile labels (keep thumbs as-is)
+  const tiles = grid.querySelectorAll(".tile");
+  tiles.forEach((tile, i) => {
+    const t = __lastTemplates[i];
+    if(!t) return;
+    const b = tile.querySelector("b");
+    const s = tile.querySelector("span");
+    if(b) b.textContent = t.title || b.textContent;
+    if(s) s.textContent = t.description || s.textContent;
+  });
+
+  statusEl.textContent = `Generated ${__lastTemplates.length} (AI copy applied)`;
+  return;
+}
       grid.innerHTML = "";
       const cat = payload.category;
       const style = payload.style;
