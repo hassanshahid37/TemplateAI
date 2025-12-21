@@ -418,19 +418,38 @@ if(typeof window !== "undefined"){
 }
 
 
-// === Phase AC: Asset Intelligence ===
-function assignAssetZones(template){
-  const zones = {
-    hero: { type: "image", importance: "high" },
-    product: { type: "image", importance: "medium" },
-    textSafe: { type: "text", importance: "high" },
-    accent: { type: "shape", importance: "low" }
-  };
-  template.assetZones = zones;
-  template.layoutStyle = ["poster","split","centered"][Math.floor(Math.random()*3)];
-  return template;
+// === Phase AC-2: Visual Asset Rendering ===
+function applyAssetRendering(template, container){
+  if(!template || !template.assetZones) return;
+
+  const hero = document.createElement("div");
+  hero.style.height = "120px";
+  hero.style.borderRadius = "12px";
+  hero.style.marginBottom = "10px";
+  hero.style.background = "linear-gradient(135deg,#1f3c88,#4a9eff)";
+
+  const product = document.createElement("div");
+  product.style.height = "70px";
+  product.style.borderRadius = "10px";
+  product.style.marginBottom = "8px";
+  product.style.background = "linear-gradient(135deg,#0f2027,#203a43,#2c5364)";
+
+  const accent = document.createElement("div");
+  accent.style.height = "6px";
+  accent.style.width = "40%";
+  accent.style.borderRadius = "4px";
+  accent.style.background = "#4a9eff";
+
+  container.prepend(accent);
+  container.prepend(product);
+  container.prepend(hero);
 }
 
-if (Array.isArray(window.templates)) {
-  window.templates = window.templates.map(t => assignAssetZones(t));
-}
+document.addEventListener("DOMContentLoaded", ()=>{
+  const cards = document.querySelectorAll(".template-card");
+  cards.forEach((card, i)=>{
+    if(window.templates && window.templates[i]){
+      applyAssetRendering(window.templates[i], card);
+    }
+  });
+});
