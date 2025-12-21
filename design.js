@@ -1,3 +1,11 @@
+// === NEXORA INTEGRITY GUARD (AC→AD→AE) ===
+// Do NOT replace core logic. Merge-only zone.
+window.__NEXORA_INTEGRITY__ = window.__NEXORA_INTEGRITY__ || {
+  version: 'AC-AD-AE-locked',
+  noSilentFallback: true,
+  noShrink: true,
+};
+
 /* Nexora – design.js
    Visual template generator (client-side fallback + preview layouts)
    No external deps. Exposes window.NexoraDesign.
@@ -462,3 +470,6 @@ function ad1EnhanceLayout(t, index){
 if (Array.isArray(window.templates)) {
   window.templates = window.templates.map((t, i) => ad1EnhanceLayout(t, i));
 }
+
+
+// === END NEXORA INTEGRITY GUARD ===
