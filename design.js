@@ -418,31 +418,52 @@ if(typeof window !== "undefined"){
 }
 
 
-// === Phase AE: Progressive Rendering & Speed ===
-// Render templates in chunks to improve perceived speed
-function progressiveRender(templates, renderFn, chunkSize = 4, delay = 40) {
-  let index = 0;
-  function next() {
-    const slice = templates.slice(index, index + chunkSize);
-    slice.forEach(t => renderFn(t));
-    index += chunkSize;
-    if (index < templates.length) {
-      requestAnimationFrame(() => setTimeout(next, delay));
-    }
+// === AE-4: Quality Uplift (Copy & Hierarchy Intelligence) ===
+function ae4EnhanceTemplate(t, index){
+  const headlineVariants = [
+    "Discover What Matters",
+    "Designed for Modern Brands",
+    "Built to Stand Out",
+    "Simple. Bold. Effective.",
+    "Create Impact Instantly",
+    "Designed to Convert"
+  ];
+
+  const subVariants = [
+    "Clean layout with strong visual balance.",
+    "Premium spacing and modern hierarchy.",
+    "Optimized for attention and clarity.",
+    "Crafted for high engagement.",
+    "Minimal design with maximum impact."
+  ];
+
+  const ctaVariants = [
+    "Shop Now",
+    "Get Started",
+    "Learn More",
+    "Explore",
+    "View Collection",
+    "Join Today"
+  ];
+
+  if (!t.headline || t.headline.length < 6) {
+    t.headline = headlineVariants[index % headlineVariants.length];
   }
-  next();
+
+  if (!t.subhead || t.subhead.length < 10) {
+    t.subhead = subVariants[index % subVariants.length];
+  }
+
+  t.cta = ctaVariants[index % ctaVariants.length];
+
+  t.hierarchy = {
+    headlineWeight: index % 2 === 0 ? "bold" : "semibold",
+    emphasis: index % 3 === 0 ? "headline" : "visual"
+  };
+
+  return t;
 }
 
-// Wrap existing renderTemplates if present
-if (typeof window.renderTemplates === "function") {
-  const _renderTemplates = window.renderTemplates;
-  window.renderTemplates = function(templates) {
-    const container = document.querySelector("#templates");
-    if (!container) return _renderTemplates(templates);
-
-    container.innerHTML = "";
-    progressiveRender(templates, t => {
-      _renderTemplates([t]);
-    });
-  };
+if (Array.isArray(window.templates)) {
+  window.templates = window.templates.map((t, i) => ae4EnhanceTemplate(t, i));
 }
