@@ -1,395 +1,234 @@
+// api/generate.js
+// Nexora / Templify – Serverless template intent generator
+// Rule: NEVER break UI. NEVER return 500 for generation. Always return {success:true, templates:[...]}.
+
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
+
+  // Parse body safely
+  let body = {};
+  try {
+    body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+  } catch {
+    body = {};
+  }
+
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const category = typeof body.category === "string" ? body.category : "Instagram Post";
+  const style = typeof body.style === "string" ? body.style : "Dark Premium";
+  const mode = typeof body.mode === "string" ? body.mode : "full";
+  const count = clampInt(body.count, 24, 1, 200);
+
+  // Copy/enrichment calls should NEVER block or error the UI.
+  // If frontend triggers copy mode, we simply acknowledge.
+  if (mode === "copy") {
+    return res.status(200).json({ success: true, templates: [] });
+  }
+
+  // Fast fallback templates (always available)
+  const fallback = makeFallbackTemplates({ prompt, category, style, count });
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY missing" });// === Phase AE-3.1: Two-stage generation (copy-only mode, never-500) ===
-// In copy mode we only generate copy fields. Any failure must return 200 with empty templates.
-// === Phase AE-3.3: Cosmetic fix — silent 204 for copy mode ===
-        if (mode === "copy") {
-          // Background copy enrichment only.
-          // Frontend is fire-and-forget; never return 500 or JSON.
-          try {
-            const OpenAI = (await import("openai")).default;
-            const client = new OpenAI({ apiKey });
-            await client.chat.completions.create({
-              model: "gpt-4o-mini",
-              messages: [{ role: "user", content: "noop" }]
-            });
-          } catch (e) {
-            // swallow silently
-          }
-          return res.status(204).end();
-        }
-` +
-          `Return STRICT JSON ONLY:
-{
-  "templates":[
-    {
-      "title":"...",
-      "description":"...",
-      "cta":"...",
-      "badge":"..."
+
+  // No key => return fallback immediately (fast, stable)
+  if (!apiKey) {
+    return res.status(200).json({ success: true, templates: fallback });
+  }
+
+  // With key => try AI once; if it fails or is slow, return fallback (no 500)
+  try {
+    const templates = await withTimeout(
+      generateWithOpenAI({ apiKey, prompt, category, style, count }),
+      8500
+    );
+
+    if (Array.isArray(templates) && templates.length) {
+      return res.status(200).json({ success: true, templates: templates.slice(0, count) });
     }
-  ]
-}`
-        }
-      ]
+  } catch {
+    // silent fallback
+  }
+
+  return res.status(200).json({ success: true, templates: fallback });
+}
+
+/* ---------------- helpers ---------------- */
+
+function clampInt(v, def, min, max) {
+  const n = typeof v === "number" ? v : parseInt(v, 10);
+  if (!Number.isFinite(n)) return def;
+  return Math.max(min, Math.min(max, n));
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    Promise.resolve(promise)
+      .then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+  });
+}
+
+function seededPick(arr, seed) {
+  if (!arr.length) return "";
+  const x = Math.abs(hashCode(seed)) % arr.length;
+  return arr[x];
+}
+
+function hashCode(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h << 5) - h + str.charCodeAt(i);
+    h |= 0;
+  }
+  return h;
+}
+
+function titleCase(s) {
+  return (s || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function makeFallbackTemplates({ prompt, category, style, count }) {
+  const p = (prompt || "").trim();
+  const base = p ? titleCase(p) : "New Collection";
+
+  const vibes = [
+    "Bold Announcement",
+    "Minimal Quote",
+    "Split Hero",
+    "Photo Card",
+    "Feature Grid",
+    "Editorial",
+    "Modern Banner",
+    "Clean Promo",
+    "Vibrant Sale",
+    "Soft Gradient",
+    "Neon Accent",
+    "Glass Overlay",
+  ];
+
+  const ctas = ["Shop Now", "Learn More", "Join Now", "Apply Today", "Get Started", "Explore"];
+
+  const subs = [
+    "Premium design with clear hierarchy.",
+    "High-contrast, clean layout.",
+    "Modern typography and spacing.",
+    "Editorial layout with strong headline.",
+    "Minimalist composition with punch.",
+  ];
+
+  const templates = [];
+  for (let i = 0; i < count; i++) {
+    const vibe = vibes[i % vibes.length];
+    const cta = seededPick(ctas, `${p}|${style}|${i}`);
+    const sub = seededPick(subs, `${category}|${i}|${p}`);
+
+    templates.push({
+      title: `${category} #${i + 1}`,
+      subtitle: `${style} • ${vibe}`,
+      category,
+      style,
+      headline: base,
+      subhead: sub,
+      cta,
+      // Hints consumed by design.js (safe to ignore if not used)
+      vibe,
+      layoutHint: vibe.toLowerCase().replace(/\s+/g, "-"),
+      seed: `${hashCode(`${p}|${category}|${style}|${i}`)}`,
     });
+  }
+  return templates;
+}
 
-    const raw = completion?.choices?.[0]?.message?.content || "";
-    const parsed = extractJson(raw) || {};
-    const templates = Array.isArray(parsed.templates) ? parsed.templates : [];
+async function generateWithOpenAI({ apiKey, prompt, category, style, count }) {
+  const OpenAI = (await import("openai")).default;
+  const client = new OpenAI({ apiKey });
 
-    // Normalize fields to strings and cap length (safety)
-    const norm = templates.slice(0, n).map(t => ({
-      title: t?.title ? String(t.title).slice(0, 80) : "",
-      description: t?.description ? String(t.description).slice(0, 140) : "",
-      cta: t?.cta ? String(t.cta).slice(0, 24) : "",
-      badge: t?.badge ? String(t.badge).slice(0, 24) : ""
+  const system =
+    "You are a premium template intent generator. Respond ONLY with valid JSON. No markdown, no extra text.";
+
+  const user = [
+    `Generate ${count} premium ${category} template intents for the prompt: "${prompt || "general"}".`,
+    `Style: ${style}.`,
+    "Return STRICT JSON in this shape:",
+    "{",
+    '  "templates": [',
+    "    {",
+    '      "title": "Instagram Post #1",',
+    '      "subtitle": "Dark Premium • Bold Announcement",',
+    '      "category": "Instagram Post",',
+    '      "style": "Dark Premium",',
+    '      "headline": "Short headline",',
+    '      "subhead": "One sentence supporting line",',
+    '      "cta": "Shop Now",',
+    '      "vibe": "Bold Announcement",',
+    '      "layoutHint": "split-hero"',
+    "    }",
+    "  ]",
+    "}",
+    "Rules: keep copy short, avoid profanity, do not include any URLs, and keep fields as plain strings.",
+  ].join("\n");
+
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.6,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+
+  const text = completion?.choices?.[0]?.message?.content || "";
+  const data = extractJson(text);
+  const arr = data && Array.isArray(data.templates) ? data.templates : null;
+  if (!arr) return null;
+
+  // Normalize & harden
+  const cleaned = arr
+    .filter((t) => t && typeof t === "object")
+    .map((t, idx) => ({
+      title: String(t.title || `${category} #${idx + 1}`),
+      subtitle: String(t.subtitle || `${style} • Premium`),
+      category: String(t.category || category),
+      style: String(t.style || style),
+      headline: String(t.headline || ""),
+      subhead: String(t.subhead || ""),
+      cta: String(t.cta || ""),
+      vibe: String(t.vibe || ""),
+      layoutHint: String(t.layoutHint || ""),
     }));
 
-    return res.status(200).json({ success: true, mode: "copy", templates: norm });
-  } catch (e) {
-    // Never fail the request; frontend already rendered instant templates.
-    return res.status(200).json({ success: true, mode: "copy", templates: [], warning: "copy_generation_failed" });
-  }
-}
-      ]
-    });
-
-    const raw = completion?.choices?.[0]?.message?.content || "";
-    const parsed = extractJson(raw) || {};
-    const templates = Array.isArray(parsed.templates) ? parsed.templates : [];
-    return res.status(200).json({ success: true, mode: "copy", templates });
-  } catch (e) {
-    return res.status(200).json({ success: false, mode: "copy", templates: [], error: "copy_generation_failed" });
-  }
+  return cleaned;
 }
 
+function extractJson(text) {
+  if (!text || typeof text !== "string") return null;
 
-
-  // --- helpers ---
-  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-  const safeInt = (v, d) => {
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) ? n : d;
-  };
-
-  function extractJson(text) {
-    if (!text || typeof text !== "string") return null;
-    try { return JSON.parse(text); } catch {}
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    try { return JSON.parse(m[0]); } catch { return null; }
-  }
-
-  // --- design systems ---
-  const PALETTES = [
-    { name: "Blue Violet", bg: "linear-gradient(135deg,#0b5fff,#7b5cff)", primary:"#0b5fff", accent:"#7b5cff", ink:"#ffffff", soft:"rgba(255,255,255,.10)" },
-    { name: "Midnight Cyan", bg: "linear-gradient(135deg,#0b1020,#00d1ff)", primary:"#00d1ff", accent:"#0b5fff", ink:"#ffffff", soft:"rgba(255,255,255,.10)" },
-    { name: "Sunset Premium", bg: "linear-gradient(135deg,#ff4d6d,#7b5cff)", primary:"#ff4d6d", accent:"#7b5cff", ink:"#ffffff", soft:"rgba(255,255,255,.10)" },
-    { name: "Emerald Noir", bg: "linear-gradient(135deg,#07130f,#00c389)", primary:"#00c389", accent:"#0b5fff", ink:"#ffffff", soft:"rgba(255,255,255,.10)" },
-    { name: "Gold Luxe", bg: "linear-gradient(135deg,#0b1020,#ffcc66)", primary:"#ffcc66", accent:"#7b5cff", ink:"#ffffff", soft:"rgba(255,255,255,.10)" },
-    { name: "Clean Light", bg: "linear-gradient(135deg,#ffffff,#e9efff)", primary:"#0b5fff", accent:"#7b5cff", ink:"#0b1020", soft:"rgba(10,20,60,.08)" },
-  ];
-
-  const ARCHETYPES = [
-    { name: "Hero + CTA" },
-    { name: "Split Card" },
-    { name: "Badge Overlay" },
-    { name: "Editorial" },
-    { name: "Promo Poster" },
-    { name: "Minimal Product" },
-  ];
-
-  function makeFallbackTemplates({ count, category, style }) {
-    const now = Date.now();
-    const W = 980, H = 620;
-    const list = [];
-    for (let i = 0; i < count; i++) {
-      const p = PALETTES[i % PALETTES.length];
-      const a = ARCHETYPES[i % ARCHETYPES.length];
-
-      const headline = [
-        "Grow Your Brand",
-        "New Collection Drop",
-        "Limited Time Offer",
-        "Upgrade Your Look",
-        "Launch Day Special",
-        "Premium Minimal Design"
-      ][i % 6];
-
-      const sub = [
-        "Modern premium aesthetic • built for conversions",
-        "Clean typography • bold hierarchy • strong spacing",
-        "High-impact layout • ready for social",
-        "Luxury vibes • sharp contrast • crisp grid",
-        "Designed to look like Canva premium packs",
-        "Elegant, minimal, and highly usable"
-      ][i % 6];
-
-      const elements = [];
-
-      elements.push({
-        type: "background",
-        x: 0, y: 0, w: W, h: H,
-        title: "BG", sub: "",
-        fill: p.bg
-      });
-
-      elements.push({
-        type: "shape",
-        x: 60, y: 70, w: 860, h: 480,
-        title: "CARD", sub: "",
-        background: p.soft,
-        radius: 24
-      });
-
-      elements.push({
-        type: "badge",
-        x: 90, y: 100, w: 220, h: 54,
-        title: "LIMITED", sub: "",
-        background: "rgba(255,255,255,.14)",
-        radius: 999,
-        color: p.ink,
-        fontSize: 16,
-        fontWeight: 700
-      });
-
-      elements.push({
-        type: "heading",
-        x: 90, y: 170, w: 740, h: 120,
-        title: headline,
-        sub: "",
-        color: p.ink,
-        fontSize: 64,
-        fontWeight: 800
-      });
-
-      elements.push({
-        type: "text",
-        x: 90, y: 290, w: 640, h: 80,
-        title: sub,
-        sub: "",
-        color: "rgba(255,255,255,.85)",
-        fontSize: 20,
-        fontWeight: 500
-      });
-
-      elements.push({
-        type: "image",
-        x: 650, y: 260, w: 250, h: 220,
-        title: "IMAGE",
-        sub: "Photo / product",
-        background: "linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.06))",
-        radius: 22
-      });
-
-      elements.push({
-        type: "cta",
-        x: 90, y: 400, w: 260, h: 64,
-        title: "Get Started",
-        sub: "",
-        background: `linear-gradient(135deg, ${p.primary}, ${p.accent})`,
-        radius: 18,
-        color: "#ffffff",
-        fontSize: 18,
-        fontWeight: 700
-      });
-
-      list.push({
-        id: `fb_${now}_${i+1}`,
-        title: `${category} #${i+1}`,
-        description: `${style} • ${p.name} • ${a.name}`,
-        category,
-        style,
-        bg: p.bg,
-        canvas: { w: W, h: H },
-        elements
-      });
-    }
-    return list;
-  }
-
-  function normalizeTemplates(rawTemplates, { count, category, style }) {
-    const W = 980, H = 620;
-
-    const templates = (Array.isArray(rawTemplates) ? rawTemplates : []).slice(0, count).map((t, i) => {
-      const bg = t?.bg || t?.background || null;
-
-      const elements = (Array.isArray(t?.elements) ? t.elements : []).slice(0, 14).map((e) => {
-        const type = String(e.type ?? "card");
-        const x = clamp(Number(e.x ?? 80), 0, W);
-        const y = clamp(Number(e.y ?? 80), 0, H);
-        const w = clamp(Number(e.w ?? e.width ?? 320), 20, W);
-        const h = clamp(Number(e.h ?? e.height ?? 120), 20, H);
-
-        const title = String(e.title ?? e.text ?? (type === "image" ? "IMAGE" : "TEXT"));
-        const sub = String(e.sub ?? e.caption ?? "");
-
-        return {
-          id: e.id || (globalThis.crypto?.randomUUID?.() || (`${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`)),
-          type,
-          x, y, w, h,
-          title, sub,
-          fontSize: e.fontSize ?? null,
-          fontWeight: e.fontWeight ?? null,
-          color: e.color ?? null,
-          align: e.align ?? null,
-          radius: e.radius ?? null,
-          fill: e.fill ?? null,
-          background: e.background ?? null,
-          opacity: e.opacity ?? null
-        };
-      });
-
-      return {
-        id: t?.id || `ai_${Date.now()}_${i+1}`,
-        title: t?.title || `${category} #${i+1}`,
-        description: t?.description || t?.subtitle || `${style} • Canva-style`,
-        category: t?.category || category,
-        style: t?.style || style,
-        bg,
-        canvas: { w: W, h: H },
-        elements
-      };
-    }).filter(t => t.elements.length >= 3);
-
-    return templates;
-  }
-
+  // Try direct parse
   try {
-    const {
-      prompt = "",
-      count = 24,
-      category = "Instagram Post",
-      style = "Dark Premium",
-      notes = ""
-    } = req.body || {};
+    return JSON.parse(text);
+  } catch {}
 
-  const mode = String((req.body||{}).mode || "full");
-
-
-    const safeCount = clamp(safeInt(count, 24), 1, 200);
-    const safePrompt = (String(prompt).trim() || `Generate premium ${category} templates in ${style} style.`);
-
-    const paletteNames = PALETTES.map(p => p.name).join(", ");
-    const archetypeNames = ARCHETYPES.map(a => a.name).join(", ");
-
-    const schemaHint = `Return STRICT JSON ONLY in this exact format:
-IMPORTANT RULES:
-- Each template MUST include 4–10 elements (no empty templates)
-- Elements MUST be positioned with x,y,w,h for a 980x620 canvas
-- Use these element types only: heading, text, badge, button, image, shape
-- Make layouts premium and readable at thumbnail size (one dominant hero)
-
-{
-  "templates":[
-    {
-      "id":"t1",
-      "title":"Template title",
-      "description":"One-line description for the tile",
-      "category":"${category}",
-      "style":"${style}",
-      "bg":"CSS gradient or color (recommended)",
-      "canvas":{"w":980,"h":620},
-      "elements":[
-        {
-          "type":"background",
-          "x":0,"y":0,"w":980,"h":620,
-          "title":"BG","sub":"",
-          "fill":"linear-gradient(135deg,#0b5fff,#7b5cff)"
-        },
-        {
-          "type":"heading",
-          "x":80,"y":90,"w":820,"h":120,
-          "title":"Headline text","sub":"",
-          "fontSize":72,
-          "fontWeight":800,
-          "color":"#ffffff",
-          "align":"left"
-        },
-        {
-          "type":"cta",
-          "x":80,"y":380,"w":260,"h":64,
-          "title":"Button label","sub":"",
-          "background":"linear-gradient(135deg,#0b5fff,#7b5cff)",
-          "radius":18,
-          "color":"#ffffff",
-          "fontSize":18,
-          "fontWeight":700
-        },
-        {
-          "type":"image",
-          "x":650,"y":250,"w":250,"h":230,
-          "title":"IMAGE","sub":"photo placeholder",
-          "background":"linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06))",
-          "radius":22
-        }
-      ]
-    }
-  ]
-}`;
-
-    const userMsg = `You are a premium Canva-style design template generator.
-Generate ${safeCount} DISTINCT templates for category: ${category}.
-Style: ${style}.
-User prompt: ${safePrompt}
-Notes: ${notes}
-
-Hard requirements:
-- Return ONLY valid JSON (no markdown, no comments).
-- Must look Canva-level: hierarchy, spacing, intentional composition.
-- Use premium palettes (choose and vary): ${paletteNames}
-- Use and vary archetypes: ${archetypeNames}
-- Prefer using bg (template.bg) and a background element.
-- Elements must fit within canvas 980x620.
-- Use 5 to 10 elements per template.
-- Allowed types: background, heading, subhead, text, badge, cta, image, shape, card.
-- If you add style fields, only these: fontSize, fontWeight, color, align, radius, fill, background, opacity.
-
-${schemaHint}`;
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.9,
-        messages: [
-          { role: "system", content: "Respond ONLY with valid JSON. No extra text." },
-          { role: "user", content: userMsg }
-        ]
-      })
-    });
-
-    const raw = await response.json();
-    const content = raw?.choices?.[0]?.message?.content || "";
-    const data = extractJson(content);
-
-    const normalized = normalizeTemplates(data?.templates, { count: safeCount, category, style });
-
-    if (!normalized.length) {
-      const fb = makeFallbackTemplates({ count: safeCount, category, style });
-      return res.status(200).json({
-        success: true,
-        warning: "AI returned unusable templates — fallback used",
-        templates: fb
-      });
-    }
-
-    return res.status(200).json({ success: true, templates: normalized });
-
-  } catch (err) {
-    const fb = makeFallbackTemplates({ count: 24, category: "Instagram Post", style: "Dark Premium" });
-
-    return res.status(200).json({
-      success: true,
-      warning: "AI failed — fallback used",
-      templates: fb
-    });
+  // Try to find the first JSON object in the text
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {}
   }
+  return null;
 }
