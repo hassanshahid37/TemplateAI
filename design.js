@@ -523,7 +523,7 @@
 
 
     if(layout==="splitHero"){
-      add({ type:"shape", x:0,y:0,w:Math.round(w*0.56),h, r:48, fill: pal.bg2, opacity:0.85 });
+      add({ type:"shape", x:0,y:0,w:Math.round(w*0.56),h, r:48, fill: pal.accent, opacity:0.95 });
       add({ type:"shape", x:Math.round(w*0.53),y:Math.round(h*0.1),w:Math.round(w*0.42),h:Math.round(h*0.55), r:48, stroke:"rgba(255,255,255,0.14)", fill:"rgba(255,255,255,0.04)" });
       add({ type:"text", x:Math.round(w*0.07),y:Math.round(h*0.14), text: brand.toUpperCase(), size:Math.round(h*0.055), weight:800, color: pal.ink, letter: -0.5 });
       add({ type:"text", x:Math.round(w*0.07),y:Math.round(h*0.25), text: "NEW COLLECTION", size:Math.round(h*0.03), weight:700, color: pal.muted, letter: 2 });
