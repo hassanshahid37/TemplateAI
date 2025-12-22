@@ -611,7 +611,6 @@
           grid.appendChild(div);
         });
 
-        try{ localStorage.setItem("NEXORA_LAST_TEMPLATES_EDITOR", JSON.stringify(__lastTemplates)); }catch(e){}
         statusEl.textContent = `Generated ${templates.length}`;
         return;
       }catch(e){
@@ -732,25 +731,11 @@ function openEditorWith(payload){
     // payload can be {cat,style,i} OR a full template object
     const cat = payload?.category || payload?.cat || $("#cat").value;
     const style = payload?.style || $("#style").value;
-const tpl0 = payload?.elements ? toEditorTemplate(payload) : null;
-
-// AD-H4: If Open Editor is triggered without a template, fallback to last selected / last generated.
-// This guarantees editor always receives a real template.
-let tpl = tpl0;
-try{
-  if(!tpl){
-    const sel = JSON.parse(localStorage.getItem("nexora_selected_template_v1")||"null");
-    if(sel && sel.elements) tpl = sel;
-  }
-}catch(e){}
-try{
-  if(!tpl){
-    const last = JSON.parse(localStorage.getItem("NEXORA_LAST_TEMPLATES_EDITOR")||"null");
-    if(Array.isArray(last) && last.length && last[0]?.elements) tpl = last[0];
-  }
-}catch(e){}
-if(!tpl && Array.isArray(__lastTemplates) && __lastTemplates.length) tpl = __lastTemplates[0];
-
+let tpl = payload?.elements ? toEditorTemplate(payload) : null;
+    // If called with settings-only payload (e.g., Open Editor button), default to latest generated template #1
+    if(!tpl && Array.isArray(__lastTemplates) && __lastTemplates.length){
+      tpl = toEditorTemplate(__lastTemplates[(payload?.i? (Number(payload.i)-1):0)] || __lastTemplates[0]);
+    }
 
     // keep latest settings for editor intelligence
     try{
@@ -782,7 +767,13 @@ if(!tpl && Array.isArray(__lastTemplates) && __lastTemplates.length) tpl = __las
   // Keep latest generated templates (for tile click -> editor)
   let __lastTemplates = [];
 
-  $("#openEditor").addEventListener("click", ()=>openEditorWith({cat:$("#cat").value, style:$("#style").value, i:1}));
+  $("#openEditor").addEventListener("click", (ev)=>{
+    ev.preventDefault();
+    // If user didn't click a preview tile, open the latest generated template #1 (fallback to seeded)
+    const first = (Array.isArray(__lastTemplates) && __lastTemplates.length ? __lastTemplates[0] : null)
+      || (Array.isArray(seedTemplates) ? seedTemplates[0] : null);
+    openEditorWith(first || {cat:$("#cat").value, style:$("#style").value, i:1});
+  });
   $("#themeBtn").addEventListener("click", toggleTheme);
 
   $("#exportBtn").addEventListener("click", ()=>{
