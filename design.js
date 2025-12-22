@@ -151,7 +151,62 @@
     return list[list.length-1].v;
   }
 
-  function archetypeWithIntent(seed, intent){
+  
+  // Phase AD-5: Creative Divergence Engine
+  // Deterministic 4-way "lens" that forces varied creative interpretations per batch.
+  function lensForIndex(intent, idx){
+    const lenses = ["branding","urgency","info","cta"];
+    return lenses[(idx|0) % lenses.length];
+  }
+
+  function archetypeWithLens(seed, intent, lens){
+    const base = [
+      { name:"Split Hero", layout:"splitHero" },
+      { name:"Badge Promo", layout:"badgePromo" },
+      { name:"Minimal Quote", layout:"minimalQuote" },
+      { name:"Feature Grid", layout:"featureGrid" },
+      { name:"Big Number", layout:"bigNumber" },
+      { name:"Photo Card", layout:"photoCard" }
+    ];
+
+    const t = intent?.type || "generic";
+    const l = (lens || "branding").toLowerCase();
+
+    // Force four distinct archetypes for the first 4 templates by lens.
+    const forcedByType = {
+      hiring:   { branding:"photoCard", urgency:"bigNumber",  info:"featureGrid", cta:"badgePromo" },
+      promo:    { branding:"splitHero", urgency:"bigNumber",  info:"featureGrid", cta:"badgePromo" },
+      announcement:{ branding:"splitHero", urgency:"bigNumber", info:"photoCard",  cta:"badgePromo" },
+      quote:    { branding:"photoCard", urgency:"splitHero",  info:"featureGrid", cta:"minimalQuote" },
+      generic:  { branding:"photoCard", urgency:"bigNumber",  info:"featureGrid", cta:"splitHero" }
+    };
+
+    const forcedLayout = (forcedByType[t] || forcedByType.generic)[l];
+    const forced = base.find(a=>a.layout===forcedLayout);
+    if(forced) return forced;
+
+    // Fallback to weighted intent selection if ever needed.
+    return archetypeWithIntent(seed, intent);
+  }
+
+  function pickCTAForLens(intent, seed, lens){
+    const l = (lens||"").toLowerCase();
+    const base = pickCTA(intent, seed);
+    if(intent?.ctaMode === "hiring"){
+      if(l==="urgency") return "Apply Now";
+      if(l==="info") return "View Roles";
+      if(l==="cta") return "Send CV";
+      return base;
+    }
+    if(intent?.ctaMode === "promo"){
+      if(l==="urgency") return "Limited Time";
+      if(l==="info") return "See Details";
+      if(l==="cta") return "Shop Now";
+      return base;
+    }
+    return base;
+  }
+function archetypeWithIntent(seed, intent){
     // Keep existing archetypes but weight them by intent.
     const base = [
       { name:"Split Hero", layout:"splitHero" },
@@ -386,7 +441,9 @@
     const intent = classifyIntent(prompt, category, style);
     const pal = paletteForStyle(style, seed, intent);
     const b = brandFromPrompt(prompt);
-    const arch = archetypeWithIntent(seed, intent);
+    const lens = lensForIndex(intent, idx);
+    intent.lens = lens;
+    const arch = archetypeWithLens(seed, intent, lens);
 
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
@@ -405,7 +462,7 @@
       w: meta.w, h: meta.h, pal,
       brand: b.brand || "Nexora",
       tagline: b.tagline || "Premium templates, fast.",
-      ctaText: pickCTA(intent, seed),
+      ctaText: pickCTAForLens(intent, seed, lens),
       intent,
       seed
     });
