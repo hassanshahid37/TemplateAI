@@ -224,21 +224,7 @@
 
 </style>
     
-
-<script>
-/* NEXORA_SESSION_RESTORE_V1 */
-(function(){
-  try{
-    var key='nexora_generation_state_v1';
-    var saved=sessionStorage.getItem(key);
-    if(saved){
-      window.__NEXORA_RESTORE__=JSON.parse(saved);
-    }
-  }catch(e){}
-})();
-</script>
 </head>
-
 
 <body data-theme="dark">
   <div class="wrap">
@@ -775,11 +761,149 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
       template: tpl,
       createdAt: Date.now()
     }));
+
+    // allow homepage to restore when user comes back from editor
+    try{ sessionStorage.setItem("nexora_restore_home_v1","1"); }catch(_){}
+    try{ saveHomeState && saveHomeState(); }catch(_){}
     window.location.href = "editor.html";
   }
 
   // Keep latest generated templates (for tile click -> editor)
   let __lastTemplates = [];
+
+  // --- Homepage state persistence (restore after returning from editor) ---
+  const HOME_STATE_KEY = "nexora_home_state_v1";
+
+  function getNavType(){
+    try{
+      const nav = performance.getEntriesByType && performance.getEntriesByType("navigation");
+      if(nav && nav[0] && nav[0].type) return nav[0].type;
+    }catch(_){}
+    try{
+      if(performance && performance.navigation){
+        const t = performance.navigation.type;
+        if(t === 1) return "reload";
+        if(t === 2) return "back_forward";
+      }
+    }catch(_){}
+    return "navigate";
+  }
+
+  function saveHomeState(){
+    try{
+      const catEl = document.getElementById("cat");
+      const countEl = document.getElementById("count");
+      const styleEl = document.getElementById("style");
+      const promptEl = document.getElementById("prompt");
+      const notesEl = document.getElementById("notes");
+      const state = {
+        v: 1,
+        ts: Date.now(),
+        scrollY: window.scrollY || 0,
+        settings: {
+          cat: catEl ? catEl.value : "",
+          count: countEl ? (Number(countEl.value||1) || 1) : 1,
+          style: styleEl ? styleEl.value : "",
+          prompt: promptEl ? (promptEl.value||"") : "",
+          notes: notesEl ? (notesEl.value||"") : ""
+        },
+        templates: Array.isArray(__lastTemplates) ? __lastTemplates : []
+      };
+      sessionStorage.setItem(HOME_STATE_KEY, JSON.stringify(state));
+    }catch(_){}
+  }
+
+  function loadHomeState(){
+    try{
+      const raw = sessionStorage.getItem(HOME_STATE_KEY);
+      if(!raw) return null;
+      const st = JSON.parse(raw);
+      if(!st || !Array.isArray(st.templates) || !st.settings) return null;
+      return st;
+    }catch(_){ return null; }
+  }
+
+  function clearHomeState(){
+    try{ sessionStorage.removeItem(HOME_STATE_KEY); }catch(_){}
+    try{ sessionStorage.removeItem("nexora_restore_home_v1"); }catch(_){}
+  }
+
+  function renderTemplatesFromList(list){
+    const grid = document.getElementById("grid");
+    if(!grid) return;
+
+    grid.innerHTML = "";
+    __lastTemplates = [];
+
+    (list||[]).forEach((t)=>{
+      if(!t) return;
+      const div = document.createElement("div");
+      div.className = "tpl";
+      div.tabIndex = 0;
+
+      const title = (t.title || t.name || "Template");
+      const desc = (t.description || ((t.style||"")+" • Canva-style")).trim();
+
+      div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
+
+      const thumb = div.querySelector(".thumb");
+      try{ if(thumb && typeof drawThumb==="function") drawThumb(thumb, t, t.bg); }catch(_){}
+
+      __lastTemplates.push(t);
+      div.addEventListener("click", ()=>openEditorWith(t));
+      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
+      grid.appendChild(div);
+    });
+
+    window.NEXORA = window.NEXORA || {};
+    window.NEXORA.lastTemplates = __lastTemplates;
+  }
+
+  function tryRestoreHome(){
+    // only restore when we explicitly came back from editor; refresh should reset
+    const navType = getNavType();
+    if(navType === "reload"){ clearHomeState(); return false; }
+
+    try{
+      const flag = sessionStorage.getItem("nexora_restore_home_v1");
+      if(!flag) return false;
+
+      const st = loadHomeState();
+      if(!st) { sessionStorage.removeItem("nexora_restore_home_v1"); return false; }
+
+      const catEl = document.getElementById("cat");
+      const countEl = document.getElementById("count");
+      const styleEl = document.getElementById("style");
+      const promptEl = document.getElementById("prompt");
+      const notesEl = document.getElementById("notes");
+
+      if(catEl && st.settings.cat) catEl.value = st.settings.cat;
+      if(countEl && st.settings.count) countEl.value = String(st.settings.count);
+      if(styleEl && st.settings.style) styleEl.value = st.settings.style;
+      if(promptEl) promptEl.value = st.settings.prompt || "";
+      if(notesEl) notesEl.value = st.settings.notes || "";
+
+      renderTemplatesFromList(st.templates);
+
+      requestAnimationFrame(()=>{ try{ window.scrollTo(0, st.scrollY||0); }catch(_){} });
+
+      sessionStorage.removeItem("nexora_restore_home_v1");
+      return true;
+    }catch(_){
+      try{ sessionStorage.removeItem("nexora_restore_home_v1"); }catch(__){}
+      return false;
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s||"")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
 
   $("#openEditor").addEventListener("click", (ev)=>{
     ev.preventDefault();
@@ -810,6 +934,8 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+    tryRestoreHome();
+
   const btn = document.getElementById("generateBtn");
   if (!btn) {
     alert("Generate button not found. UI mismatch.");
@@ -834,6 +960,8 @@ currentStyle = "Dark Premium";
 // 1) Show high-quality client-side templates immediately (design.js).
 // 2) In background, fetch AI copy-only improvements and merge into existing templates.
 seedTemplates(payload.count);
+        try{ saveHomeState(); }catch(_){}
+
 statusEl.textContent = "Generating (instant)…";
 
       
