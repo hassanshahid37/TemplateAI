@@ -1,3 +1,4 @@
+
 /* Nexora – design.js
    Visual template generator (client-side fallback + preview layouts)
    No external deps. Exposes window.NexoraDesign.
@@ -301,7 +302,61 @@
     return pick(archetypes, seed);
   }
 
-  function buildElements(layout, spec){
+  
+  // Phase AD-2: Visual Styling Pass (depth, accents, framing) — logic-only
+  function adStylePass(elements, spec, layout){
+    if(!Array.isArray(elements) || !spec) return elements;
+    const { w, h, pal, seed, intent } = spec;
+    const t = intent?.type || "generic";
+
+    // Subtle frame for "finished" look
+    const frame = {
+      type:"shape",
+      x: Math.round(w*0.04),
+      y: Math.round(h*0.04),
+      w: Math.round(w*0.92),
+      h: Math.round(h*0.92),
+      r: Math.round(Math.min(w,h)*0.05),
+      fill: "rgba(255,255,255,0.00)",
+      stroke: "rgba(255,255,255,0.12)"
+    };
+
+    // Accent glows (simple rounded blocks; renderers treat as shapes)
+    const a = pal?.accent || "#2f7bff";
+    const b = pal?.accent2 || "#9b5cff";
+    const glow1 = { type:"shape", x:Math.round(w*-0.08), y:Math.round(h*-0.10), w:Math.round(w*0.62), h:Math.round(h*0.44), r:Math.round(Math.min(w,h)*0.22), fill: a, opacity:0.10 };
+    const glow2 = { type:"shape", x:Math.round(w*0.55), y:Math.round(h*0.60), w:Math.round(w*0.58), h:Math.round(h*0.48), r:Math.round(Math.min(w,h)*0.22), fill: b, opacity:0.10 };
+
+    // Thin accent rail (keeps posters from feeling like wireframes)
+    const rail = {
+      type:"shape",
+      x: Math.round(w*0.08),
+      y: Math.round(h*0.22),
+      w: Math.round(w*0.01),
+      h: Math.round(h*0.56),
+      r: 999,
+      fill: "rgba(255,255,255,0.00)",
+      stroke: (t==="promo" ? a : "rgba(255,255,255,0.14)")
+    };
+
+    // Insert right after bg (index 1)
+    const bgIndex = Math.max(0, elements.findIndex(e => String(e?.type||"").toLowerCase()==="bg"));
+    const at = (bgIndex>=0? bgIndex+1 : 0);
+
+    // Avoid over-styling minimal quote: only frame + one glow
+    const pack = (layout==="minimalQuote")
+      ? [glow1, frame]
+      : (t==="promo")
+        ? [glow1, glow2, rail, frame]
+        : [glow1, glow2, frame];
+
+    elements.splice(at, 0, ...pack);
+
+    adStylePass(elements, spec, layout);
+    return elements;
+  }
+
+function buildElements(layout, spec){
     const { w,h,pal,brand,tagline,seed } = spec;
     const elements = [];
     const s = seed;
@@ -668,13 +723,28 @@ function applyIntentScene(template, intent) {
 
 // Wrap generateOne to ensure scene wiring (explicit, no silent fallback)
 (function(){
+  // Wrap generateOne safely (supports both legacy signatures)
+  // - Current: generateOne(category, prompt, style, idx)
+  // - Legacy:  generateOne(seed, { intent, ... })
   if (typeof generateOne === "function" && !generateOne.__intentWrapped) {
     const _gen = generateOne;
-    const wrapped = function(seed, opts){
-      const t = _gen(seed, opts);
-      try {
-        if (opts && opts.intent) return applyIntentScene(t, opts.intent);
-      } catch(e) {}
+    const wrapped = function(...args){
+      const t = _gen(...args);
+      try{
+        let intent = null;
+
+        // Legacy call: (seed, opts)
+        if(args.length === 2 && args[1] && typeof args[1] === "object"){
+          intent = args[1].intent || null;
+        }
+
+        // Current call: (category, prompt, style, idx)
+        if(!intent && args.length >= 2 && typeof args[0] === "string" && typeof args[1] === "string"){
+          intent = classifyIntent(args[1], args[0], args[2]);
+        }
+
+        if(intent) return applyIntentScene(t, intent);
+      }catch(e){}
       return t;
     };
     wrapped.__intentWrapped = true;
