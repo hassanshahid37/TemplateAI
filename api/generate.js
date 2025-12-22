@@ -1,3 +1,4 @@
+
 // Nexora / Templify – Vercel Serverless API: /api/generate
 // Phase AD-5 compatible: never throws, always returns 200 JSON (no 500)
 // Deterministic, no external AI calls.
@@ -71,8 +72,33 @@ function titleCase(s) {
     .join(" ");
 }
 
+
+function classifyIntent(prompt, category, style){
+  const p = String(prompt||"").toLowerCase();
+  const has = (arr)=>arr.some(k=>p.includes(k));
+  let type = "generic";
+  if(has(["hiring","job","jobs","vacancy","careers","apply","join our team","recruit"])) type="hiring";
+  else if(has(["sale","discount","%","off","limited","offer","deal","promo","promotion","clearance","black friday"])) type="promo";
+  else if(has(["launch","announcement","announcing","introducing","event","webinar","workshop","meetup","conference"])) type="announcement";
+  else if(has(["quote","motiv","inspir","mindset","success","dream","life"]) || (p.split(/\s+/).filter(Boolean).length<=6 && !has(["sale","discount","hiring","job"]))) type="quote";
+  // gentle category bias
+  const cat = String(category||"").toLowerCase();
+  if((cat.includes("presentation") || cat.includes("resume")) && type==="promo") type="generic";
+  const st = String(style||"").toLowerCase();
+  if(st.includes("corporate") && type==="promo") type="generic";
+  return type;
+}
+
+function pick(list, n){
+  const a = Array.isArray(list)?list:[];
+  if(!a.length) return "";
+  const i = ((n%a.length)+a.length)%a.length;
+  return a[i];
+}
+
 function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
   const base = prompt ? titleCase(prompt) : "New Collection";
+  const intentType = classifyIntent(prompt, category, style);
 
   // AD-5 archetype set (must match frontend expectations loosely)
   const archetypes = [
@@ -91,11 +117,26 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 
   const templates = [];
   for (let i = 0; i < count; i++) {
-    const a = archetypes[(start + i) % archetypes.length];
+    const a0 = archetypes[(start + i) % archetypes.length];
+
+    // deterministic CTA and vibe aligned with detected intent
+    const a = { ...a0 };
+    if(intentType==="promo") a.cta = pick(["Shop Now","Get % Off","Limited Offer","Buy Now"], i+start);
+    else if(intentType==="hiring") a.cta = pick(["Apply Now","View Roles","Send CV","Join Our Team"], i+start);
+    else if(intentType==="announcement") a.cta = pick(["Learn More","RSVP","Get Details"], i+start);
+    else if(intentType==="quote") a.cta = pick(["Save","Share","Follow"], i+start);
+
 
     // Small deterministic copy tweaks to avoid 4 identical strings
     const headline = base.length > 28 ? base.slice(0, 28) : base;
     const subhead =
+      intentType === "announcement"
+        ? "Save the date • Don’t miss it"
+        : intentType === "hiring"
+        ? "Apply today • Grow with us"
+        : intentType === "quote"
+        ? "Save this • Share it"
+        :
       a.vibe === "Info"
         ? "Clear details • Simple structure"
         : a.vibe === "Urgency"
@@ -106,7 +147,7 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 
     templates.push({
       title: `${category} #${i + 1}`,
-      subtitle: `${style} • ${a.vibe}`,
+      description: `${style} • ${(intentType||a.vibe)} • ${a.vibe}`,
       category,
       style,
       headline,
