@@ -198,6 +198,106 @@
       if(l==="cta") return "Send CV";
       return base;
     }
+
+
+  // Phase AD-6: Intent Intensity Control (logic-only; no UI)
+  // Ensures a single prompt yields calm → balanced → bold → aggressive executions deterministically.
+  function baselineIntensityShift(prompt){
+    const p = (prompt||"").toLowerCase();
+    let score = 0;
+    // urgency / action boosts
+    if(/\b(now|today|urgent|limited|hurry|sale|discount|offer|act|apply|join|vote|donate|register|subscribe|buy)\b/.test(p)) score += 2;
+    if(/\b(free|win|save|best|new|launch|exclusive)\b/.test(p)) score += 1;
+    // calm / abstract dampeners
+    if(/\b(love|peace|calm|mindful|quiet|relax|freely|freedom|hope|dream|kindness)\b/.test(p)) score -= 2;
+    if(/\b(quote|poem|thought|message)\b/.test(p)) score -= 1;
+    // map to shift (-1..+1)
+    if(score >= 3) return 1;
+    if(score <= -2) return -1;
+    return 0;
+  }
+
+  function intensityForIndex(prompt, idx){
+    const levels = ["calm","balanced","bold","aggressive"];
+    const shift = baselineIntensityShift(prompt);
+    const raw = ((idx|0) % 4 + 4 + shift) % 4;
+    const label = levels[raw] || "balanced";
+    const scaleMap = { calm:0.92, balanced:1.00, bold:1.14, aggressive:1.28 };
+    const weightMap = { calm:0, balanced:0, bold:50, aggressive:100 };
+    return { label, scale: scaleMap[label] || 1.0, weightBoost: weightMap[label] || 0 };
+  }
+
+  function boostCTAText(cta, intensity){
+    const t = (cta||"").trim();
+    const lvl = intensity?.label || "balanced";
+    if(!t) return t;
+    // Keep intent-specific CTAs as-is, but strengthen generic soft CTAs.
+    const soft = /^(discover|learn more|view|explore)$/i.test(t);
+    if(lvl==="calm") return t;
+    if(lvl==="balanced") return t;
+    if(lvl==="bold"){
+      if(soft) return "Get Started";
+      if(/^shop now$/i.test(t)) return "Shop Now";
+      if(/^send cv$/i.test(t)) return "Send CV";
+      return t;
+    }
+    if(lvl==="aggressive"){
+      if(soft) return "Act Now";
+      if(/^get started$/i.test(t)) return "Start Now";
+      if(/^apply now$/i.test(t)) return "Apply Now";
+      if(/^limited time$/i.test(t)) return "Limited Time";
+      return t;
+    }
+    return t;
+  }
+
+  function applyIntensityToElements(elements, intensity){
+    if(!elements || !elements.length) return elements;
+    const s = intensity?.scale || 1.0;
+    const wb = intensity?.weightBoost || 0;
+
+    // Identify headline candidates: text elements with largest size.
+    const textEls = elements.filter(e=>e && e.type==="text" && typeof e.size==="number");
+    let maxSize = 0;
+    for(const e of textEls) maxSize = Math.max(maxSize, e.size||0);
+
+    const headlineThreshold = maxSize * 0.86; // top tier
+    const subThreshold = maxSize * 0.62; // second tier
+
+    for(const e of elements){
+      if(!e) continue;
+
+      if(e.type==="text"){
+        const baseSize = (typeof e.size==="number") ? e.size : null;
+        if(baseSize!=null){
+          // Headline scales strongest, subhead moderate, body mild.
+          let mult = 1.0;
+          if(baseSize >= headlineThreshold) mult = 1.0 + (s-1.0)*1.15;
+          else if(baseSize >= subThreshold) mult = 1.0 + (s-1.0)*0.75;
+          else mult = 1.0 + (s-1.0)*0.35;
+
+          e.size = Math.round(baseSize * mult);
+        }
+        if(typeof e.weight==="number"){
+          // Only boost for bold/aggressive; keep calm clean.
+          e.weight = Math.min(950, Math.round(e.weight + wb));
+        }
+      }
+
+      // CTA containers often use pill/chip/badge types with tsize
+      if((e.type==="pill" || e.type==="chip" || e.type==="badge") && typeof e.tsize==="number"){
+        const mult = 1.0 + (s-1.0)*0.70;
+        e.tsize = Math.round(e.tsize * mult);
+        if(typeof e.tweight==="number"){
+          e.tweight = Math.min(950, Math.round(e.tweight + wb));
+        }
+        if(typeof e.text==="string"){
+          e.text = boostCTAText(e.text, intensity);
+        }
+      }
+    }
+    return elements;
+  }
     if(intent?.ctaMode === "promo"){
       if(l==="urgency") return "Limited Time";
       if(l==="info") return "See Details";
@@ -443,6 +543,8 @@ function archetypeWithIntent(seed, intent){
     const b = brandFromPrompt(prompt);
     const lens = lensForIndex(intent, idx);
     intent.lens = lens;
+    const intensity = intensityForIndex(prompt, idx);
+    intent.intensity = intensity.label;
     const arch = archetypeWithLens(seed, intent, lens);
 
     const titleByCategory = {
@@ -462,10 +564,11 @@ function archetypeWithIntent(seed, intent){
       w: meta.w, h: meta.h, pal,
       brand: b.brand || "Nexora",
       tagline: b.tagline || "Premium templates, fast.",
-      ctaText: pickCTAForLens(intent, seed, lens),
+      ctaText: boostCTAText(pickCTAForLens(intent, seed, lens), intensity),
       intent,
       seed
     });
+    applyIntensityToElements(elements, intensity);
 
     return {
       id: "tpl_"+seed.toString(16)+"_"+idx,
