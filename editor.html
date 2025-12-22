@@ -588,7 +588,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   if(!draft){
     try{ draft = JSON.parse(localStorage.getItem("templify_draft")||"null"); }catch(e){}
   }
-const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "Style"}` : (draft?.template?.title || "Untitled");
+const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "Style"}` : "Untitled";
   $("#docTitle").textContent = title;
 
   // State
@@ -608,39 +608,19 @@ const state = {
 
   // Load a generated template (if provided by index)
   try{
-    // AD-H4: Strong fallback chain so editor always loads a generated template.
-    if(!draft || !draft.template){
-      // 1) templify_draft already tried earlier; now fallback to selected template
-      try{
-        const sel = JSON.parse(localStorage.getItem("nexora_selected_template_v1")||"null");
-        if(sel && sel.elements) draft = { template: sel, meta: (draft && draft.meta) ? draft.meta : null };
-      }catch(e){}
-      // 2) fallback to last generated templates (persisted by index.html)
-      try{
-        if(!draft?.template){
-          const last = JSON.parse(localStorage.getItem("NEXORA_LAST_TEMPLATES_EDITOR")||"null");
-          if(Array.isArray(last) && last.length && last[0]?.elements) draft = { template: last[0], meta: (draft && draft.meta) ? draft.meta : null };
-        }
-      }catch(e){}
+    if(draft?.template?.elements && Array.isArray(draft.template.elements)){
+      state.elements = draft.template.elements.map(e => ({
+        id: e.id || uid(),
+        x: Number(e.x ?? 80), y: Number(e.y ?? 80),
+        w: Number(e.w ?? 420), h: Number(e.h ?? 120),
+        title: String(e.title ?? e.text ?? "TEXT"),
+        sub: String(e.sub ?? e.subtitle ?? "")
+      }));
     }
+  }catch(e){}
 
-    // Normalize element fields for safety (subtitle/text -> sub/title)
-    const els0 = draft?.template?.elements;
-    if(els0 && Array.isArray(els0)){
-      state.elements = els0.map(e => {
-        const title = String(e.title ?? e.text ?? "TEXT");
-        const sub = String(e.sub ?? e.subtitle ?? "");
-        return {
-          id: e.id || uid(),
-          x: Number(e.x ?? 80), y: Number(e.y ?? 80),
-          w: Number(e.w ?? 420), h: Number(e.h ?? 120),
-          title,
-          sub
-        };
-      });
-    }
-  }catch(e){} 
-// Helpers
+
+  // Helpers
   function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 
   function snapshot(){
