@@ -13,6 +13,19 @@
     return (h>>>0);
   };
 
+  // deterministic RNG (mulberry32-ish), returns float in [0,1)
+  const makeRng = (seed)=>{
+    let t = (seed>>>0) || 1;
+    return ()=>{
+      t = (t + 0x6D2B79F5) >>> 0;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+
+
   const CATEGORIES = {
     "Instagram Post": { w:1080,h:1080, ratio:"1:1", kind:"social" },
     "Story": { w:1080,h:1920, ratio:"9:16", kind:"story" },
@@ -135,7 +148,16 @@
       // corporate promos should be less loud
       intent.energy="medium";
     }
-    return intent;
+    
+    // keyword signals (deterministic, rule-based)
+    intent.keywords = {
+      luxury: /(luxury|premium|elite|high[-\s]?end|exclusive)/i.test(prompt||""),
+      realEstate: /(real\s?estate|apartment|apartments|villa|villas|property|properties|condo|condos|rent|sale)/i.test(prompt||""),
+      food: /(restaurant|cafe|coffee|pizza|burger|menu|dine)/i.test(prompt||""),
+      fitness: /(gym|fitness|workout|trainer|yoga)/i.test(prompt||""),
+      tech: /(saas|app|software|ai|startup|product)/i.test(prompt||"")
+    };
+return intent;
   }
 
   function weightedPick(list, seed){
@@ -178,7 +200,39 @@
     return weightedPick(wlist, s);
   }
 
-  function normalizeStyleName(style){
+  
+  function pickLayoutVariant(category, intent, seed, idx){
+    const t = intent?.type || "generic";
+    // prefer intentional variety: cycle through a small set per intent
+    const pools = {
+      promo:        ["bigNumber","badgePromo","splitHero","featureGrid","photoCard"],
+      hiring:       ["featureGrid","splitHero","photoCard","badgePromo","bigNumber"],
+      announcement: ["splitHero","photoCard","featureGrid","bigNumber","badgePromo"],
+      quote:        ["minimalQuote","photoCard","splitHero","featureGrid"],
+      generic:      ["splitHero","photoCard","featureGrid","bigNumber","badgePromo","minimalQuote"]
+    };
+    const pool = pools[t] || pools.generic;
+
+    // stabilize across counts: start offset derived from seed, but ensure idx cycles
+    const r = makeRng(seed ^ hash("layout|"+category+"|"+t));
+    const offset = Math.floor(r()*pool.length);
+    const layout = pool[(offset + (idx||0)) % pool.length];
+
+    const nameByLayout = {
+      splitHero: "Split Hero",
+      badgePromo: "Badge Promo",
+      minimalQuote: "Minimal Quote",
+      featureGrid: "Feature Grid",
+      bigNumber: "Big Number",
+      photoCard: "Photo Card",
+      typePoster: "Typographic Poster",
+      splitBand: "Split Band"
+    };
+
+    return { layout, name: nameByLayout[layout] || layout };
+  }
+
+function normalizeStyleName(style){
     return (style||"Dark Premium").trim();
   }
 
@@ -302,67 +356,19 @@
     return pick(archetypes, seed);
   }
 
-  
-  // Phase AD-2: Visual Styling Pass (depth, accents, framing) — logic-only
-  function adStylePass(elements, spec, layout){
-    if(!Array.isArray(elements) || !spec) return elements;
-    const { w, h, pal, seed, intent } = spec;
-    const t = intent?.type || "generic";
-
-    // Subtle frame for "finished" look
-    const frame = {
-      type:"shape",
-      x: Math.round(w*0.04),
-      y: Math.round(h*0.04),
-      w: Math.round(w*0.92),
-      h: Math.round(h*0.92),
-      r: Math.round(Math.min(w,h)*0.05),
-      fill: "rgba(255,255,255,0.00)",
-      stroke: "rgba(255,255,255,0.12)"
-    };
-
-    // Accent glows (simple rounded blocks; renderers treat as shapes)
-    const a = pal?.accent || "#2f7bff";
-    const b = pal?.accent2 || "#9b5cff";
-    const glow1 = { type:"shape", x:Math.round(w*-0.08), y:Math.round(h*-0.10), w:Math.round(w*0.62), h:Math.round(h*0.44), r:Math.round(Math.min(w,h)*0.22), fill: a, opacity:0.10 };
-    const glow2 = { type:"shape", x:Math.round(w*0.55), y:Math.round(h*0.60), w:Math.round(w*0.58), h:Math.round(h*0.48), r:Math.round(Math.min(w,h)*0.22), fill: b, opacity:0.10 };
-
-    // Thin accent rail (keeps posters from feeling like wireframes)
-    const rail = {
-      type:"shape",
-      x: Math.round(w*0.08),
-      y: Math.round(h*0.22),
-      w: Math.round(w*0.01),
-      h: Math.round(h*0.56),
-      r: 999,
-      fill: "rgba(255,255,255,0.00)",
-      stroke: (t==="promo" ? a : "rgba(255,255,255,0.14)")
-    };
-
-    // Insert right after bg (index 1)
-    const bgIndex = Math.max(0, elements.findIndex(e => String(e?.type||"").toLowerCase()==="bg"));
-    const at = (bgIndex>=0? bgIndex+1 : 0);
-
-    // Avoid over-styling minimal quote: only frame + one glow
-    const pack = (layout==="minimalQuote")
-      ? [glow1, frame]
-      : (t==="promo")
-        ? [glow1, glow2, rail, frame]
-        : [glow1, glow2, frame];
-
-    elements.splice(at, 0, ...pack);
-
-    adStylePass(elements, spec, layout);
-    return elements;
-  }
-
-function buildElements(layout, spec){
-    const { w,h,pal,brand,tagline,seed } = spec;
+  function buildElements(layout, spec){
+    const { w,h,pal,brand,tagline,seed,ctaText,intent } = spec;
     const elements = [];
     const s = seed;
 
     const add = (el)=>{ elements.push(el); return el; };
     add({ type:"bg", x:0,y:0,w,h, fill: pal.bg, fill2: pal.bg2, style:"radial" });
+    // Global premium frame / depth
+    const lux = !!(intent && intent.keywords && intent.keywords.luxury);
+    const pad = lux ? Math.round(Math.min(w,h)*0.05) : Math.round(Math.min(w,h)*0.04);
+    add({ type:"shape", x:pad, y:pad, w:w-pad*2, h:h-pad*2, r:Math.round(Math.min(w,h)*0.04), fill:"rgba(255,255,255,0.02)", stroke:"rgba(255,255,255,0.10)" });
+    add({ type:"shape", x:pad+Math.round(pad*0.35), y:pad+Math.round(pad*0.35), w:w-(pad+Math.round(pad*0.35))*2, h:h-(pad+Math.round(pad*0.35))*2, r:Math.round(Math.min(w,h)*0.035), fill:"rgba(0,0,0,0)", stroke:"rgba(255,255,255,0.06)" });
+
 
     if(layout==="splitHero"){
       add({ type:"shape", x:0,y:0,w:Math.round(w*0.56),h, r:48, fill: pal.bg2, opacity:0.85 });
@@ -440,7 +446,8 @@ function buildElements(layout, spec){
     const intent = classifyIntent(prompt, category, style);
     const pal = paletteForStyle(style, seed, intent);
     const b = brandFromPrompt(prompt);
-    const arch = archetypeWithIntent(seed, intent);
+    const arch0 = archetypeWithIntent(seed, intent);
+    const arch = pickLayoutVariant(category, intent, seed, idx) || arch0;
 
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
@@ -464,7 +471,7 @@ function buildElements(layout, spec){
       seed
     });
 
-    return {
+    const tpl = {
       id: "tpl_"+seed.toString(16)+"_"+idx,
       title: titleByCategory[category] || (category+" #"+(idx+1)),
       subtitle,
@@ -475,6 +482,7 @@ function buildElements(layout, spec){
       palette: pal,
       elements
     };
+    return applyIntentScene(tpl, intent, seed);
   }
 
   function generateTemplates(opts){
@@ -616,31 +624,25 @@ function buildElements(layout, spec){
    PHASE AB — SCENE BUILDER ENGINE (POSTER STRUCTURE)
    ===================================================== */
 
-function applySceneBuilder(template){
+function applySceneBuilder(template, seed){
   if(!template) return template;
+  const r = makeRng((seed>>>0) ^ hash("scene-builder"));
 
-  // Scene regions
+  // Scene regions (deterministic)
   const scenes = ["hero-left","hero-right","hero-top","center-focus"];
-  const scene = scenes[Math.floor(Math.random()*scenes.length)];
+  const scene = scenes[Math.floor(r()*scenes.length)];
 
   template.scene = {
     layout: scene,
     regions: {
-      hero: { weight: 0.55 + Math.random()*0.2 },
-      support: { weight: 0.2 + Math.random()*0.15 },
-      base: { weight: 0.15 + Math.random()*0.1 }
+      hero: { weight: 0.55 + r()*0.2 },
+      support: { weight: 0.2 + r()*0.15 },
+      base: { weight: 0.15 + r()*0.1 }
     }
   };
 
-  // Anchors
-  template.anchors = [
-    { type: "panel", dominance: "hero", radius: 18, opacity: 0.9 },
-    { type: "shape", dominance: "support", radius: 999, opacity: 0.35 }
-  ];
-
-  // Structured blocks
-  template.blocksStructure = {
-    textPlacement:
+  template.anchors = {
+    textAnchor:
       scene === "hero-left" ? "right" :
       scene === "hero-right" ? "left" :
       scene === "hero-top" ? "bottom" : "center",
@@ -650,16 +652,14 @@ function applySceneBuilder(template){
       scene === "hero-top" ? "top" : "center"
   };
 
-  // Poster balance
   template.posterBalance = {
-    negativeSpace: 0.18 + Math.random()*0.12,
-    contrastBias: Math.random() > 0.5 ? "visual" : "text"
+    negativeSpace: 0.18 + r()*0.12,
+    contrastBias: r() > 0.52 ? "visual" : "text"
   };
-
-  template.visualDominance = "scene";
 
   return template;
 }
+
 
 if(typeof window !== "undefined"){
   window.__NEXORA_PHASE_AB_SCENE__ = applySceneBuilder;
@@ -713,41 +713,14 @@ if (Array.isArray(window.templates)) {
 
 
 // ---- Intent Biasing v3: Scene Wiring & Layout Morphing ----
-function applyIntentScene(template, intent) {
-  if (typeof applySceneBuilder === "function") {
-    applySceneBuilder(template, intent);
-  }
+function applyIntentScene(template, intent, seed){
+  try{
+    if (typeof applySceneBuilder === "function") {
+      applySceneBuilder(template, seed>>>0);
+    }
+  }catch(e){}
   template.__intent = intent;
   return template;
 }
 
-// Wrap generateOne to ensure scene wiring (explicit, no silent fallback)
-(function(){
-  // Wrap generateOne safely (supports both legacy signatures)
-  // - Current: generateOne(category, prompt, style, idx)
-  // - Legacy:  generateOne(seed, { intent, ... })
-  if (typeof generateOne === "function" && !generateOne.__intentWrapped) {
-    const _gen = generateOne;
-    const wrapped = function(...args){
-      const t = _gen(...args);
-      try{
-        let intent = null;
 
-        // Legacy call: (seed, opts)
-        if(args.length === 2 && args[1] && typeof args[1] === "object"){
-          intent = args[1].intent || null;
-        }
-
-        // Current call: (category, prompt, style, idx)
-        if(!intent && args.length >= 2 && typeof args[0] === "string" && typeof args[1] === "string"){
-          intent = classifyIntent(args[1], args[0], args[2]);
-        }
-
-        if(intent) return applyIntentScene(t, intent);
-      }catch(e){}
-      return t;
-    };
-    wrapped.__intentWrapped = true;
-    generateOne = wrapped;
-  }
-})();
