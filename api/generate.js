@@ -1,7 +1,7 @@
 // Nexora / Templify – Serverless template intent generator
 // HARD SAFE VERSION: never calls OpenAI, never throws, never returns 500.
 
-export default async function handler(req, res) {
+ async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(200).json({ success: true, templates: [] });
   }
@@ -71,5 +71,3 @@ function makeFallbackTemplates({ prompt, category, style, count }) {
   }
   return templates;
 }
-// AD-4 hook
-// applyDominance is called during layout finalize step
