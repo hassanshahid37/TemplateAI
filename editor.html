@@ -1574,5 +1574,28 @@ function escapeHtml(str){
   updateUI();
 })();
 </script>
+
+<script>
+(function(){
+  const CANVAS_W = 1200;
+  const CANVAS_H = 900;
+
+  function fixCanvas(){
+    const canvas = document.getElementById('canvas');
+    if(!canvas) return;
+    canvas.style.width = CANVAS_W + 'px';
+    canvas.style.height = CANVAS_H + 'px';
+    canvas.style.minWidth = CANVAS_W + 'px';
+    canvas.style.minHeight = CANVAS_H + 'px';
+  }
+
+  // run multiple times in case editor loads async
+  fixCanvas();
+  setTimeout(fixCanvas, 100);
+  setTimeout(fixCanvas, 300);
+  setTimeout(fixCanvas, 600);
+})();
+</script>
+
 </body>
 </html>
