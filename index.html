@@ -828,45 +828,43 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
     try{ sessionStorage.removeItem("nexora_restore_home_v1"); }catch(_){}
   }
 
-  function renderTemplatesFromList(list){
+  
+function renderTemplatesFromList(list){
     const grid = document.getElementById("previewGrid");
     if(!grid) return;
 
     grid.innerHTML = "";
     __lastTemplates = [];
 
-    (list||[]).forEach((t)=>{
+    (list||[]).forEach((t, i)=>{
       if(!t) return;
+      const tpl = toEditorTemplate(t);
+      __lastTemplates.push(tpl);
+
       const div = document.createElement("div");
       div.className = "tile";
       div.tabIndex = 0;
 
-      const title = (t.title || t.name || "Template");
-      const desc = (t.description || ((t.style||"")+" • Canva-style"));
+      const title = (tpl.title || (tpl.category||"Template") + " #" + (i+1));
+      const desc = (tpl.description || ((tpl.style||"")+" • Canva-style")).trim();
 
       div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
 
-      const thumb = div.querySelector('.thumb');
-      if(thumb){
-        try{ drawThumb(thumb, t, t.bg); }catch(_){}
-      }
+      const thumb = div.querySelector(".thumb");
+      if(thumb) drawThumb(thumb, tpl, tpl.bg);
 
-      __lastTemplates.push(t);
-      div.addEventListener("click", ()=>openEditorWith(t));
-      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
+      div.addEventListener("click", ()=>openEditorWith(tpl));
+      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(tpl); });
       grid.appendChild(div);
     });
 
-    try{
-      if(statusEl) statusEl.textContent = __lastTemplates.length ? `Generated ${__lastTemplates.length}` : "Ready";
-    }catch(_){}
-  });
-
+    // expose for debugging
     window.NEXORA = window.NEXORA || {};
     window.NEXORA.lastTemplates = __lastTemplates;
   }
 
-  function tryRestoreHome(){
+  function tryRestoreHome(
+){
     // only restore when we explicitly came back from editor; refresh should reset
     const navType = getNavType();
     if(navType === "reload"){ clearHomeState(); return false; }
@@ -902,21 +900,7 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
     }
   }
 
-  
-  function restorePersistedTemplates(){
-    try{
-      const raw = localStorage.getItem("nexora_last_templates_v1");
-      if(!raw) return false;
-      const list = JSON.parse(raw);
-      if(!Array.isArray(list) || !list.length) return false;
-      renderTemplatesFromList(list);
-      // also keep in-memory for saveHomeState
-      __lastTemplates = list;
-      return true;
-    }catch(_){ return false; }
-  }
-
-function escapeHtml(s){
+  function escapeHtml(s){
     return String(s||"")
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
@@ -951,20 +935,12 @@ function escapeHtml(s){
   // restore theme + initial previews
   const saved = localStorage.getItem("templify_theme");
   if(saved==="light"||saved==="dark") setTheme(saved);
-
-  // Restore templates when coming back from editor or after reload; otherwise seed defaults.
-  let restored = false;
-  try{ restored = (typeof tryRestoreHome === "function" && tryRestoreHome()); }catch(_){}
-  if(!restored){
-    try{ restored = restorePersistedTemplates(); }catch(_){}
-  }
-  window.__NEXORA_HOME_RESTORED = !!restored;
-
-  if(!restored) seedTemplates(12);
+  // initial previews are rendered on DOMContentLoaded so restore can win
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    if(!window.__NEXORA_HOME_RESTORED) { try{ tryRestoreHome(); window.__NEXORA_HOME_RESTORED = true; }catch(_){} }
+    const restored = tryRestoreHome();
+    if(!restored){ seedTemplates(12); }
 
   const btn = document.getElementById("generateBtn");
   if (!btn) {
@@ -1130,9 +1106,6 @@ if(Array.isArray(__lastTemplates) && __lastTemplates.length){
       });
 
       statusEl.textContent = `Generated ${__lastTemplates.length}`;
-
-      // persist last generated templates so Back/Reload doesn't revert to defaults
-      try{ localStorage.setItem("nexora_last_templates_v1", JSON.stringify(__lastTemplates)); }catch(_){}
     } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
       seedTemplates(payload.count);
