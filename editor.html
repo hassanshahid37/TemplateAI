@@ -578,11 +578,35 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
 
   // 2) Current: selected template saved by index
   try{
-    const t = JSON.parse(localStorage.getItem("nexora_selected_template_v1")||"null");
+    const raw = localStorage.getItem("nexora_selected_template_v1") || "null";
+    const t = JSON.parse(raw);
     if(t && typeof t === "object"){
-      draft = { template: t, prompt: draftPrompt, notes: draftNotes };
+      // If index stored a full draft object, use it directly.
+      if(t.template && typeof t.template === "object"){
+        draft = t;
+      }else{
+        // Backward-compat: index may have stored the template directly.
+        draft = { template: t, prompt: draftPrompt, notes: draftNotes, meta: { name: (t.name||t.title||"Untitled") } };
+      }
     }
   }catch(e){}
+
+  // 2b) Fallback: payload stored in sessionStorage by index
+  try{
+    if(!draft){
+      const rawP = sessionStorage.getItem("nexora_editor_payload_v1") || "null";
+      const p = JSON.parse(rawP);
+      if(p && p.t && typeof p.t === "object"){
+        draft = {
+          template: p.t,
+          prompt: p.prompt || draftPrompt,
+          notes: p.notes || draftNotes,
+          meta: { category: p.category || "", style: p.style || "", name: (p.t.name||p.t.title||"Untitled") }
+        };
+      }
+    }
+  }catch(_e){}
+
 
   // 3) Legacy: older key
   if(!draft){
@@ -1330,26 +1354,35 @@ function escapeHtml(str){
 
   // Auto-fit zoom on load/resizes so the template is comfortably editable.
   // (Previously it looked correct only after toggling DevTools because that fires resize.)
-  (function initAutoFit(){
-    const run = (force=false)=>{ try{ autoFitZoom(force); }catch(e){} };
+  
+(function initAutoFit(){
+  // Auto-fit once the layout is stable (devtools toggle triggers resize; we want same behavior on first load)
+  let pending = false;
+  function requestFit(){
+    if(pending) return;
+    pending = true;
+    requestAnimationFrame(()=>{
+      pending = false;
+      try{ autoFitZoom(); }catch(_e){}
+    });
+  }
 
-    const schedule = ()=>{
-      // run a few times as layout + fonts settle
-      requestAnimationFrame(()=>run(true));
-      setTimeout(()=>run(true), 60);
-      setTimeout(()=>run(true), 180);
-      setTimeout(()=>run(true), 420);
-    };
+  // Run after initial paint + fonts load (fonts can change measurements)
+  requestFit();
+  window.addEventListener("load", requestFit, {passive:true});
+  window.addEventListener("resize", requestFit, {passive:true});
 
-    schedule();
-    window.addEventListener('resize', ()=>run(false), {passive:true});
-    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) schedule(); }, {passive:true});
+  if(document.fonts && document.fonts.ready){
+    document.fonts.ready.then(()=>{ requestFit(); }).catch(()=>{});
+  }
 
-    try{
-      const ro = new ResizeObserver(()=>run(false));
-      ro.observe(stage);
-    }catch(e){}
-  })();
+  const wrap = document.getElementById("stageWrap") || document.getElementById("stage")?.parentElement;
+  if(wrap && window.ResizeObserver){
+    const ro = new ResizeObserver(()=>requestFit());
+    ro.observe(wrap);
+  }
+})();
+;
 })();
 </script>
 </body>
