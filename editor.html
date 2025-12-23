@@ -1580,21 +1580,22 @@ function escapeHtml(str){
   const WORK_W = 1200;
   const WORK_H = 900;
 
-  function normalizeTemplate(){
+  function fixCanvas(){
     const canvas = document.getElementById('canvas');
     if(!canvas) return;
-
-    // force working size
     canvas.style.width = WORK_W + 'px';
     canvas.style.height = WORK_H + 'px';
     canvas.style.minWidth = WORK_W + 'px';
     canvas.style.minHeight = WORK_H + 'px';
+  }
 
-    // find elements
+  function recenterElements(){
+    const canvas = document.getElementById('canvas');
+    if(!canvas) return;
+
     const els = Array.from(canvas.querySelectorAll('.el'));
     if(!els.length) return;
 
-    // compute bounds
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     els.forEach(el=>{
       const x = parseFloat(el.style.left||0);
@@ -1605,32 +1606,33 @@ function escapeHtml(str){
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x+w);
       maxY = Math.max(maxY, y+h);
+      el.style.transform = '';
     });
 
     const tplW = maxX - minX;
     const tplH = maxY - minY;
     if(tplW<=0 || tplH<=0) return;
 
-    const scale = Math.min(WORK_W / tplW, WORK_H / tplH, 1);
-
-    const offsetX = (WORK_W - tplW*scale)/2 - minX*scale;
-    const offsetY = (WORK_H - tplH*scale)/2 - minY*scale;
+    const offsetX = (WORK_W - tplW)/2 - minX;
+    const offsetY = (WORK_H - tplH)/2 - minY;
 
     els.forEach(el=>{
       const x = parseFloat(el.style.left||0);
       const y = parseFloat(el.style.top||0);
-      el.style.left = (x*scale + offsetX) + 'px';
-      el.style.top  = (y*scale + offsetY) + 'px';
-      el.style.transform = 'scale('+scale+')';
-      el.style.transformOrigin = 'top left';
+      el.style.left = (x + offsetX) + 'px';
+      el.style.top  = (y + offsetY) + 'px';
     });
   }
 
-  // run after load & after template injection
-  setTimeout(normalizeTemplate, 0);
-  setTimeout(normalizeTemplate, 150);
-  setTimeout(normalizeTemplate, 400);
-  setTimeout(normalizeTemplate, 800);
+  function apply(){
+    fixCanvas();
+    recenterElements();
+  }
+
+  apply();
+  setTimeout(apply, 150);
+  setTimeout(apply, 400);
+  setTimeout(apply, 800);
 })();
 </script>
 
