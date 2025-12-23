@@ -829,7 +829,7 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
   }
 
   function renderTemplatesFromList(list){
-    const grid = document.getElementById("grid");
+    const grid = document.getElementById("previewGrid");
     if(!grid) return;
 
     grid.innerHTML = "";
@@ -838,22 +838,29 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
     (list||[]).forEach((t)=>{
       if(!t) return;
       const div = document.createElement("div");
-      div.className = "tpl";
+      div.className = "tile";
       div.tabIndex = 0;
 
       const title = (t.title || t.name || "Template");
-      const desc = (t.description || ((t.style||"")+" • Canva-style")).trim();
+      const desc = (t.description || ((t.style||"")+" • Canva-style"));
 
       div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
 
-      const thumb = div.querySelector(".thumb");
-      try{ if(thumb && typeof drawThumb==="function") drawThumb(thumb, t, t.bg); }catch(_){}
+      const thumb = div.querySelector('.thumb');
+      if(thumb){
+        try{ drawThumb(thumb, t, t.bg); }catch(_){}
+      }
 
       __lastTemplates.push(t);
       div.addEventListener("click", ()=>openEditorWith(t));
       div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
       grid.appendChild(div);
     });
+
+    try{
+      if(statusEl) statusEl.textContent = __lastTemplates.length ? `Generated ${__lastTemplates.length}` : "Ready";
+    }catch(_){}
+  });
 
     window.NEXORA = window.NEXORA || {};
     window.NEXORA.lastTemplates = __lastTemplates;
@@ -895,7 +902,21 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
     }
   }
 
-  function escapeHtml(s){
+  
+  function restorePersistedTemplates(){
+    try{
+      const raw = localStorage.getItem("nexora_last_templates_v1");
+      if(!raw) return false;
+      const list = JSON.parse(raw);
+      if(!Array.isArray(list) || !list.length) return false;
+      renderTemplatesFromList(list);
+      // also keep in-memory for saveHomeState
+      __lastTemplates = list;
+      return true;
+    }catch(_){ return false; }
+  }
+
+function escapeHtml(s){
     return String(s||"")
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
@@ -930,11 +951,20 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
   // restore theme + initial previews
   const saved = localStorage.getItem("templify_theme");
   if(saved==="light"||saved==="dark") setTheme(saved);
-  seedTemplates(12);
+
+  // Restore templates when coming back from editor or after reload; otherwise seed defaults.
+  let restored = false;
+  try{ restored = (typeof tryRestoreHome === "function" && tryRestoreHome()); }catch(_){}
+  if(!restored){
+    try{ restored = restorePersistedTemplates(); }catch(_){}
+  }
+  window.__NEXORA_HOME_RESTORED = !!restored;
+
+  if(!restored) seedTemplates(12);
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    tryRestoreHome();
+    if(!window.__NEXORA_HOME_RESTORED) { try{ tryRestoreHome(); window.__NEXORA_HOME_RESTORED = true; }catch(_){} }
 
   const btn = document.getElementById("generateBtn");
   if (!btn) {
@@ -1100,6 +1130,9 @@ if(Array.isArray(__lastTemplates) && __lastTemplates.length){
       });
 
       statusEl.textContent = `Generated ${__lastTemplates.length}`;
+
+      // persist last generated templates so Back/Reload doesn't revert to defaults
+      try{ localStorage.setItem("nexora_last_templates_v1", JSON.stringify(__lastTemplates)); }catch(_){}
     } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
       seedTemplates(payload.count);
