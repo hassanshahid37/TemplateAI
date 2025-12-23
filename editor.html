@@ -1577,62 +1577,30 @@ function escapeHtml(str){
 
 <script>
 (function(){
-  const WORK_W = 1200;
-  const WORK_H = 900;
-
-  function fixCanvas(){
-    const canvas = document.getElementById('canvas');
-    if(!canvas) return;
-    canvas.style.width = WORK_W + 'px';
-    canvas.style.height = WORK_H + 'px';
-    canvas.style.minWidth = WORK_W + 'px';
-    canvas.style.minHeight = WORK_H + 'px';
-  }
-
-  function recenterElements(){
+  function resetZoom(){
     const canvas = document.getElementById('canvas');
     if(!canvas) return;
 
-    const els = Array.from(canvas.querySelectorAll('.el'));
-    if(!els.length) return;
+    // Remove any scale transforms applied by editor
+    canvas.style.transform = 'scale(1)';
+    canvas.style.transformOrigin = '0 0';
 
-    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
-    els.forEach(el=>{
-      const x = parseFloat(el.style.left||0);
-      const y = parseFloat(el.style.top||0);
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x+w);
-      maxY = Math.max(maxY, y+h);
-      el.style.transform = '';
-    });
-
-    const tplW = maxX - minX;
-    const tplH = maxY - minY;
-    if(tplW<=0 || tplH<=0) return;
-
-    const offsetX = (WORK_W - tplW)/2 - minX;
-    const offsetY = (WORK_H - tplH)/2 - minY;
-
-    els.forEach(el=>{
-      const x = parseFloat(el.style.left||0);
-      const y = parseFloat(el.style.top||0);
-      el.style.left = (x + offsetX) + 'px';
-      el.style.top  = (y + offsetY) + 'px';
-    });
+    // Also reset parent wrappers if scaled
+    let p = canvas.parentElement;
+    while(p){
+      if(p.style && p.style.transform){
+        p.style.transform = 'scale(1)';
+        p.style.transformOrigin = '0 0';
+      }
+      p = p.parentElement;
+    }
   }
 
-  function apply(){
-    fixCanvas();
-    recenterElements();
-  }
-
-  apply();
-  setTimeout(apply, 150);
-  setTimeout(apply, 400);
-  setTimeout(apply, 800);
+  // Run after template open
+  resetZoom();
+  setTimeout(resetZoom, 100);
+  setTimeout(resetZoom, 300);
+  setTimeout(resetZoom, 600);
 })();
 </script>
 
