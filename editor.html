@@ -1577,23 +1577,60 @@ function escapeHtml(str){
 
 <script>
 (function(){
-  const CANVAS_W = 1200;
-  const CANVAS_H = 900;
+  const WORK_W = 1200;
+  const WORK_H = 900;
 
-  function fixCanvas(){
+  function normalizeTemplate(){
     const canvas = document.getElementById('canvas');
     if(!canvas) return;
-    canvas.style.width = CANVAS_W + 'px';
-    canvas.style.height = CANVAS_H + 'px';
-    canvas.style.minWidth = CANVAS_W + 'px';
-    canvas.style.minHeight = CANVAS_H + 'px';
+
+    // force working size
+    canvas.style.width = WORK_W + 'px';
+    canvas.style.height = WORK_H + 'px';
+    canvas.style.minWidth = WORK_W + 'px';
+    canvas.style.minHeight = WORK_H + 'px';
+
+    // find elements
+    const els = Array.from(canvas.querySelectorAll('.el'));
+    if(!els.length) return;
+
+    // compute bounds
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    els.forEach(el=>{
+      const x = parseFloat(el.style.left||0);
+      const y = parseFloat(el.style.top||0);
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x+w);
+      maxY = Math.max(maxY, y+h);
+    });
+
+    const tplW = maxX - minX;
+    const tplH = maxY - minY;
+    if(tplW<=0 || tplH<=0) return;
+
+    const scale = Math.min(WORK_W / tplW, WORK_H / tplH, 1);
+
+    const offsetX = (WORK_W - tplW*scale)/2 - minX*scale;
+    const offsetY = (WORK_H - tplH*scale)/2 - minY*scale;
+
+    els.forEach(el=>{
+      const x = parseFloat(el.style.left||0);
+      const y = parseFloat(el.style.top||0);
+      el.style.left = (x*scale + offsetX) + 'px';
+      el.style.top  = (y*scale + offsetY) + 'px';
+      el.style.transform = 'scale('+scale+')';
+      el.style.transformOrigin = 'top left';
+    });
   }
 
-  // run multiple times in case editor loads async
-  fixCanvas();
-  setTimeout(fixCanvas, 100);
-  setTimeout(fixCanvas, 300);
-  setTimeout(fixCanvas, 600);
+  // run after load & after template injection
+  setTimeout(normalizeTemplate, 0);
+  setTimeout(normalizeTemplate, 150);
+  setTimeout(normalizeTemplate, 400);
+  setTimeout(normalizeTemplate, 800);
 })();
 </script>
 
