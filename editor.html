@@ -1607,30 +1607,40 @@ function escapeHtml(str){
 
 <script>
 (function(){
-  // Trigger editor internal zoom/layout recalculation when template loads
-  function triggerReflow(){
-    window.dispatchEvent(new Event('resize'));
-  }
+  // === Viewport vs Document separation (Canva-style) ===
+  const VIEW_W = 1600;
+  const VIEW_H = 1200;
 
-  const canvas = document.getElementById('canvas');
-  if(!canvas){
-    setTimeout(arguments.callee, 50);
-    return;
-  }
+  function applyWorkspace(){
+    const canvas = document.getElementById('canvas');
+    if(!canvas) return;
 
-  // Observe when template elements are injected
-  const obs = new MutationObserver((muts)=>{
-    if(muts.some(m=>m.addedNodes && m.addedNodes.length)){
-      requestAnimationFrame(triggerReflow);
-      setTimeout(triggerReflow, 100);
-      setTimeout(triggerReflow, 300);
+    // Ensure a large viewport (workspace)
+    const stage = canvas.parentElement;
+    if(stage){
+      stage.style.width = VIEW_W + 'px';
+      stage.style.height = VIEW_H + 'px';
+      stage.style.display = 'flex';
+      stage.style.alignItems = 'center';
+      stage.style.justifyContent = 'center';
+      stage.style.overflow = 'visible';
     }
-  });
 
-  obs.observe(canvas, { childList:true, subtree:true });
+    // IMPORTANT: do NOT scale the document
+    canvas.style.transform = 'none';
+    canvas.style.transformOrigin = 'center center';
+    canvas.style.margin = '0';
+  }
 
-  // safety
-  setTimeout(triggerReflow, 500);
+  function run(){
+    applyWorkspace();
+    // trigger editor internal layout once, safely
+    requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));
+  }
+
+  run();
+  setTimeout(run, 150);
+  setTimeout(run, 400);
 })();
 </script>
 
