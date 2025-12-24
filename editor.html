@@ -1607,34 +1607,39 @@ function escapeHtml(str){
 
 <script>
 (function(){
-  // === Viewport vs Document separation (Canva-style) ===
-  const VIEW_W = 1600;
-  const VIEW_H = 1200;
-
-  function applyWorkspace(){
+  function lockArtboard(){
     const canvas = document.getElementById('canvas');
     if(!canvas) return;
 
-    // Ensure a large viewport (workspace)
-    const stage = canvas.parentElement;
-    if(stage){
-      stage.style.width = VIEW_W + 'px';
-      stage.style.height = VIEW_H + 'px';
-      stage.style.display = 'flex';
-      stage.style.alignItems = 'center';
-      stage.style.justifyContent = 'center';
-      stage.style.overflow = 'visible';
+    // try common template root selectors
+    const root =
+      canvas.querySelector('.template-root') ||
+      canvas.querySelector('.template') ||
+      canvas.querySelector('.artboard') ||
+      canvas.firstElementChild;
+
+    if(!root) return;
+
+    // detect document size (fallback to 1080x1080)
+    let docW = 1080, docH = 1080;
+    if(root.dataset && root.dataset.w && root.dataset.h){
+      docW = parseInt(root.dataset.w,10) || docW;
+      docH = parseInt(root.dataset.h,10) || docH;
     }
 
-    // IMPORTANT: do NOT scale the document
-    canvas.style.transform = 'none';
-    canvas.style.transformOrigin = 'center center';
-    canvas.style.margin = '0';
+    // HARD lock artboard size
+    root.style.width = docW + 'px';
+    root.style.height = docH + 'px';
+    root.style.minWidth = docW + 'px';
+    root.style.minHeight = docH + 'px';
+    root.style.maxWidth = docW + 'px';
+    root.style.maxHeight = docH + 'px';
+    root.style.flex = '0 0 auto';
+    root.style.alignSelf = 'center';
   }
 
   function run(){
-    applyWorkspace();
-    // trigger editor internal layout once, safely
+    lockArtboard();
     requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));
   }
 
