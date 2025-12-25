@@ -247,16 +247,9 @@
     .stage::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:999px}
     [data-theme="light"] .stage::-webkit-scrollbar-thumb{background:rgba(10,20,60,.14)}
 
-    /*
-      IMPORTANT: DevTools open/close changes viewport size.
-      Keep the artboard centered and sizing stable from first paint.
-    */
     .canvasWrap{
-      height: 100%;
-      min-height: 0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
+      min-height: calc(100% - 18px);
+      display:flex;align-items:flex-start;justify-content:center;
     }
     .canvas{
       width: 980px;   /* BIG center workspace */
@@ -359,6 +352,22 @@
       .tools{min-width: 1px}
     }
   </style>
+
+<style>
+.editor-stage, .stage, .canvas-stage {
+  position: relative;
+  overflow: auto;
+}
+#canvas {
+  width: 1080px;
+  height: 1080px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+</style>
+
 </head>
 
 <body data-theme="dark">
@@ -626,40 +635,7 @@ const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "S
       try{ $("#zoomPill").textContent = Math.round(zoom*100) + "%"; }catch(_){}
     }
   }
-
-  // ---- Stable first-render sizing (DevTools open/close should NOT be required) ----
-  let _fitQueued = false;
-  function queueStableFit(reason=""){
-    if(_fitQueued) return;
-    _fitQueued = true;
-    let tries = 0;
-    const step = () => {
-      tries++;
-      _fitQueued = false;
-
-      const stageBox = stage.getBoundingClientRect();
-      // If layout isn't ready yet, retry on next frame.
-      if(stageBox.width < 300 || stageBox.height < 300){
-        if(tries < 40){ requestAnimationFrame(step); }
-        return;
-      }
-
-      // First pass: compute zoom + render
-      fitZoomToStage(true);
-      renderAll();
-      updateUI();
-
-      // Second pass: after fonts/assets settle (prevents text reflow shifting sizes)
-      setTimeout(() => {
-        fitZoomToStage(false);
-        renderAll();
-        updateUI();
-      }, 80);
-    };
-    requestAnimationFrame(step);
-  }
-
-  const state = {
+const state = {
     elements: [],
     selectedIds: new Set(),
     history: [],
@@ -814,9 +790,9 @@ function addElement(x=80, y=80, w=260, h=130, title="Premium Title", sub="Add yo
     // Seed
     addElement(90, 92, 320, 150, draft?.meta?.notes ? draft.meta.notes.slice(0,32) : "Luxury Template", "Drag, resize, duplicate…");
     addElement(470, 210, 360, 170, "Modern Card", "Click elements to edit properties.");
-    // Ensure stable initial zoom/position even if viewport/layout isn't ready yet.
-    // (The DevTools open/close effect is just a resize reflow; we do it proactively.)
-    queueStableFit("load");
+    fitZoomToStage(true);
+    renderAll();
+    updateUI();
   }
 
   // Render
@@ -1465,7 +1441,7 @@ function escapeHtml(str){
 
 
   // Keyboard shortcuts
-  window.addEventListener("resize", ()=>{ try{ queueStableFit("resize"); }catch(_){} });
+  window.addEventListener("resize", ()=>{ try{ fitZoomToStage(false); renderAll(); updateUI(); }catch(_){} });
   window.addEventListener("keydown", (e)=>{
     const isMac = navigator.platform.toLowerCase().includes("mac");
     const ctrl = isMac ? e.metaKey : e.ctrlKey;
@@ -1610,18 +1586,39 @@ function escapeHtml(str){
   loadCanvasSize();
   snapshot(); // initial empty
   loadAutosaveOrSeed();
-
-  // If layout changes after first paint (fonts, scrollbars, DevTools, etc.),
-  // keep the artboard fitted/centered without requiring manual F12 toggling.
-  try{
-    const ro = new ResizeObserver(()=>queueStableFit("observer"));
-    ro.observe(stage);
-  }catch(_){}
-
-  window.addEventListener("load", ()=>{ try{ queueStableFit("window-load"); }catch(_){} });
   refreshLeft();
   updateUI();
 })();
 </script>
+
+<script>
+(function(){
+  function resetZoom(){
+    const canvas = document.getElementById('canvas');
+    if(!canvas) return;
+
+    // Remove any scale transforms applied by editor
+    canvas.style.transform = 'scale(1)';
+    canvas.style.transformOrigin = '0 0';
+
+    // Also reset parent wrappers if scaled
+    let p = canvas.parentElement;
+    while(p){
+      if(p.style && p.style.transform){
+        p.style.transform = 'scale(1)';
+        p.style.transformOrigin = '0 0';
+      }
+      p = p.parentElement;
+    }
+  }
+
+  // Run after template open
+  resetZoom();
+  setTimeout(resetZoom, 100);
+  setTimeout(resetZoom, 300);
+  setTimeout(resetZoom, 600);
+})();
+</script>
+
 </body>
 </html>
