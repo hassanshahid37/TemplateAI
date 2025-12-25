@@ -1607,5 +1607,29 @@ function escapeHtml(str){
 })();
 </script>
 
+
+<script>
+(function(){
+  const canvas = document.getElementById('canvas');
+  const stage = document.getElementById('stage');
+  const zoomPill = document.getElementById('zoomPill');
+
+  function fitCanvas(){
+    if(!canvas || !stage) return;
+    const sw = stage.clientWidth - 32;
+    const sh = stage.clientHeight - 32;
+    const cw = canvas.offsetWidth;
+    const ch = canvas.offsetHeight;
+    const scale = Math.min(sw / cw, sh / ch, 1);
+    canvas.style.transform = 'scale(' + scale.toFixed(3) + ')';
+    canvas.style.transformOrigin = 'top center';
+    if(zoomPill) zoomPill.textContent = Math.round(scale * 100) + '%';
+  }
+
+  window.addEventListener('resize', fitCanvas);
+  setTimeout(fitCanvas, 60);
+})();
+</script>
+
 </body>
 </html>
