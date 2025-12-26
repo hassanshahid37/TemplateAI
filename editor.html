@@ -238,23 +238,24 @@
 
     /* Canvas */
     .stage{
-  position: absolute;
-  inset: var(--topH) var(--rightW) 0 var(--leftW);
+  position: relative;
   overflow: auto;
   background: transparent;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
     .stage::-webkit-scrollbar{width:12px;height:12px}
     .stage::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:999px}
     [data-theme="light"] .stage::-webkit-scrollbar-thumb{background:rgba(10,20,60,.14)}
 
     .canvasWrap{
-      position: relative;
-      width: 100%;
-      height: 100%;
+      min-height: calc(100% - 18px);
+      display:flex;align-items:flex-start;justify-content:center;
     }
     .canvas{
-      width: 980px;
+      width: 980px;   /* BIG center workspace */
       height: 620px;
       border-radius: 18px;
       background:
@@ -262,11 +263,8 @@
         rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.18);
       box-shadow: 0 22px 70px rgba(0,0,0,.45);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      transform-origin: center;
+      position:relative;
+      transform-origin: 0 0;
     }
     [data-theme="light"] .canvas{
       background:
