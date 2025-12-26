@@ -255,24 +255,17 @@
       display:flex;align-items:flex-start;justify-content:center;
     }
     .canvas{
-      /* LOCKED CANVAS CONTRACT (centered in the WORK AREA, not whole viewport) */
-      width: 980px;
+      width: 980px;   /* BIG center workspace */
       height: 620px;
-      position:fixed;
-      top: calc(var(--topH) + (100% - var(--topH)) / 2);
-      left: calc(var(--leftW) + 8px + (100% - var(--leftW) - var(--rightW) - 16px) / 2);
-      transform:translate(-50%,-50%);
       border-radius: 18px;
       background:
         linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)),
         rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.18);
       box-shadow: 0 22px 70px rgba(0,0,0,.45);
-      z-index: 10;
-      overflow: hidden;
-      /* IMPORTANT: do not allow JS/layout to resize or move this element */
+      position:relative;
+      transform-origin: 0 0;
     }
-
     [data-theme="light"] .canvas{
       background:
         linear-gradient(180deg, rgba(10,20,60,.05), rgba(10,20,60,.02)),
@@ -362,6 +355,38 @@
       .tools{min-width: 1px}
     }
   </style>
+
+<style>
+/* --- Canvas lock (replaced) ---
+   Goal: fixed 980×620 stage, always centered, no absolute positioning.
+   Zoom (if used) must keep center stable.
+*/
+.stage{
+  position: relative;
+  overflow: hidden !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.canvasWrap{
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+#canvas{
+  position: relative !important;
+  width: 980px !important;
+  height: 620px !important;
+  left: auto !important;
+  top: auto !important;
+  margin: 0 !important;
+  transform-origin: 50% 50% !important;
+}
+</style>
 
 </head>
 
@@ -608,26 +633,16 @@ const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "S
   const gridOverlay = $("#gridOverlay");
   let zoom = 1;
   let gridOn = true;
-  let autoFitZoom = false; // canvas is fixed; disable auto-fit
+  let autoFitZoom = false; // canvas is fixed & centered; no auto-fit zoom
   let docW = 980, docH = 620, docBg = "";
 
   function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
 
-  function fitZoomToStage(){
-    return; // disabled: canvas is fixed & locked
-    if(!force && !autoFitZoom) return;
-    // stage is the center viewport; leave some padding so doc is smaller than background
-    const r = stage.getBoundingClientRect();
-    const pad = 46; // visual breathing room
-    const availW = Math.max(200, r.width - pad*2);
-    const availH = Math.max(200, r.height - pad*2);
-
-    const zW = availW / Math.max(1, docW);
-    const zH = availH / Math.max(1, docH);
-    const next = clamp(Math.min(zW, zH) * 0.96, 0.08, 1.25);
-
-    if(Number.isFinite(next) && Math.abs(next - zoom) > 0.001){
-      zoom = next;
+  function fitZoomToStage(force=false){
+    // Replaced: canvas is fixed 980×620 and centered by layout CSS.
+    // Keep zoom stable (default 1) unless user manually changes it.
+    if(force){
+      zoom = clamp(Number(zoom)||1, 0.08, 2.2);
       try{ $("#zoomPill").textContent = Math.round(zoom*100) + "%"; }catch(_){}
     }
   }
@@ -797,8 +812,8 @@ function addElement(x=80, y=80, w=260, h=130, title="Premium Title", sub="Add yo
     const kids = [...canvas.children].filter(n => n !== gridOverlay);
     kids.forEach(n => n.remove());
     gridOverlay.style.display = gridOn ? "block" : "none";
-    // canvas transform disabled (canvas is fixed & locked)
-canvas.style.width = `${docW}px`;
+    canvas.style.transform = `scale(${zoom})`;
+    canvas.style.width = `${docW}px`;
     canvas.style.height = `${docH}px`;
 
     for(const el of state.elements){
@@ -1034,10 +1049,10 @@ function escapeHtml(str){
   }
 
   function resizeCanvas(w,h){
-    // simple: change canvas size by modifying base dims used in renderAll
-    // We'll store in state as special element? Keep lightweight: store in localStorage
-    localStorage.setItem("templify_canvas_size", JSON.stringify({w,h}));
-    baseCanvas.w = w; baseCanvas.h = h;
+    // Locked: keep editor canvas at fixed 980×620 (per requirement).
+    baseCanvas.w = 980;
+    baseCanvas.h = 620;
+    localStorage.setItem("templify_canvas_size", JSON.stringify({w: baseCanvas.w, h: baseCanvas.h}));
     snapshot();
     renderAll();
     scheduleAutosave();
@@ -1045,10 +1060,10 @@ function escapeHtml(str){
 
   const baseCanvas = { w: 980, h: 620 };
   function loadCanvasSize(){
-    try{
-      const s = JSON.parse(localStorage.getItem("templify_canvas_size")||"null");
-      if(s?.w && s?.h){ baseCanvas.w = s.w; baseCanvas.h = s.h; }
-    }catch(e){}
+    // Locked: always fixed.
+    baseCanvas.w = 980;
+    baseCanvas.h = 620;
+    try{ localStorage.setItem("templify_canvas_size", JSON.stringify({w:980,h:620})); }catch(e){}
   }
 
   // Override renderAll to use baseCanvas
@@ -1057,8 +1072,8 @@ function escapeHtml(str){
     const kids = [...canvas.children].filter(n => n !== gridOverlay);
     kids.forEach(n => n.remove());
     gridOverlay.style.display = gridOn ? "block" : "none";
-    // canvas transform disabled (canvas is fixed & locked)
-canvas.style.width = `${baseCanvas.w}px`;
+    canvas.style.transform = `scale(${zoom})`;
+    canvas.style.width = `${baseCanvas.w}px`;
     canvas.style.height = `${baseCanvas.h}px`;
 
     for(const el of state.elements){
@@ -1239,17 +1254,27 @@ canvas.style.width = `${baseCanvas.w}px`;
 
   // Document settings
   function applyDoc(){
-    docW = Math.max(200, Number($("#docW")?.value || 980));
-    docH = Math.max(200, Number($("#docH")?.value || 620));
+    // Locked canvas size (980×620). Document panel may still set background.
+    docW = 980;
+    docH = 620;
+    $("#docW").value = 980;
+    $("#docH").value = 620;
+
     docBg = String($("#docBg")?.value || "").trim();
 
-    // canvas size locked
-    // canvas size locked
+    baseCanvas.w = 980;
+    baseCanvas.h = 620;
+
+    canvas.style.width = baseCanvas.w + "px";
+    canvas.style.height = baseCanvas.h + "px";
+
+    // Background optional
     if(docBg){
-      // canvas background locked
+      canvas.style.background = docBg;
     }else{
-      // canvas background locked
+      canvas.style.background = "";
     }
+
     renderAll();
     updateUI();
   }
@@ -1587,54 +1612,7 @@ canvas.style.width = `${baseCanvas.w}px`;
 })();
 </script>
 
-<script>
-(function(){
-  function resetZoom(){
-    const canvas = document.getElementById('canvas');
-    if(!canvas) return;
 
-    // Remove any scale transforms applied by editor
-    canvas.style.transform = 'scale(1)';
-    canvas.style.transformOrigin = '0 0';
-
-    // Also reset parent wrappers if scaled
-    let p = canvas.parentElement;
-    while(p){
-      if(p.style && p.style.transform){
-        p.style.transform = 'scale(1)';
-        p.style.transformOrigin = '0 0';
-      }
-      p = p.parentElement;
-    }
-  }
-
-  // Run after template open
-  resetZoom();
-  setTimeout(resetZoom, 100);
-  setTimeout(resetZoom, 300);
-  setTimeout(resetZoom, 600);
-})();
-</script>
-
-
-<script>
-/* Nexora Canvas Lock Guard: keeps canvas fixed in default centered state (no F12 shrink). */
-(function(){
-  const c = document.getElementById('canvas');
-  if(!c) return;
-  function lock(){
-    c.style.width = '980px';
-    c.style.height = '620px';
-    c.style.top = 'calc(var(--topH) + (100% - var(--topH)) / 2)';
-    c.style.left = 'calc(var(--leftW) + 8px + (100% - var(--leftW) - var(--rightW) - 16px) / 2)';
-    c.style.transform = 'translate(-50%, -50%)';
-    c.style.position = 'fixed';
-  }
-  lock();
-  window.addEventListener('resize', lock);
-  setInterval(lock, 400);
-})();
-</script>
 
 </body>
 </html>
