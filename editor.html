@@ -238,19 +238,21 @@
 
     /* Canvas */
     .stage{
-      position:relative;
-      overflow:auto;
-      background:transparent;
-      padding:18px;
-    }
+  position: relative;
+  overflow: auto;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
     .stage::-webkit-scrollbar{width:12px;height:12px}
     .stage::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:999px}
     [data-theme="light"] .stage::-webkit-scrollbar-thumb{background:rgba(10,20,60,.14)}
 
     .canvasWrap{
-min-height: calc(100% - 18px);
-      display:flex;align-items: center;
-justify-content:center;
+      min-height: calc(100% - 18px);
+      display:flex;align-items:flex-start;justify-content:center;
     }
     .canvas{
       width: 980px;   /* BIG center workspace */
