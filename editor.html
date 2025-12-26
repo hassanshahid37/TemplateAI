@@ -362,7 +362,12 @@
   overflow: auto;
 }
 #canvas {
-  position: relative;
+  width: 1080px;
+  height: 1080px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 </style>
 
@@ -611,12 +616,14 @@ const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "S
   const gridOverlay = $("#gridOverlay");
   let zoom = 1;
   let gridOn = true;
-  let autoFitZoom = true; // keep canvas comfortably inside stage (Canva-like)
+  let autoFitZoom = false; // HARD RESET: auto-fit disabled
   let docW = 980, docH = 620, docBg = "";
 
   function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
 
   function fitZoomToStage(force=false){
+    // HARD RESET: disabled
+    return;
     if(!force && !autoFitZoom) return;
     // stage is the center viewport; leave some padding so doc is smaller than background
     const r = stage.getBoundingClientRect();
@@ -799,7 +806,7 @@ function addElement(x=80, y=80, w=260, h=130, title="Premium Title", sub="Add yo
     const kids = [...canvas.children].filter(n => n !== gridOverlay);
     kids.forEach(n => n.remove());
     gridOverlay.style.display = gridOn ? "block" : "none";
-    canvas.style.transform = `scale(${zoom})`;
+    canvas.style.transform = `scale(1)`;
     canvas.style.width = `${docW}px`;
     canvas.style.height = `${docH}px`;
 
@@ -1059,7 +1066,7 @@ function escapeHtml(str){
     const kids = [...canvas.children].filter(n => n !== gridOverlay);
     kids.forEach(n => n.remove());
     gridOverlay.style.display = gridOn ? "block" : "none";
-    canvas.style.transform = `scale(${zoom})`;
+    canvas.style.transform = `scale(1)`;
     canvas.style.width = `${baseCanvas.w}px`;
     canvas.style.height = `${baseCanvas.h}px`;
 
@@ -1439,7 +1446,7 @@ function escapeHtml(str){
 
 
   // Keyboard shortcuts
-  window.addEventListener("resize", ()=>{ try{ fitZoomToStage(false); renderAll(); updateUI(); }catch(_){} });
+  
   window.addEventListener("keydown", (e)=>{
     const isMac = navigator.platform.toLowerCase().includes("mac");
     const ctrl = isMac ? e.metaKey : e.ctrlKey;
