@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Nexora<br><small style='opacity:.7'>AI Creative Director</small> – Nexora – Dark Premium AI Template Generator</title>
+  <title>Nexora – AI Creative Director – Dark Premium AI Template Generator</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -235,7 +235,6 @@
   height:44px;
   border-radius:14px;
   background:
-    url("./nexora-brand.jpg") 12% 50% / 260% no-repeat,
     rgba(10,14,30,.92);
   border:1px solid rgba(255,255,255,.14);
   box-shadow:0 10px 26px rgba(0,0,0,.45);
@@ -798,7 +797,7 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
     // allow homepage to restore when user comes back from editor
     try{ sessionStorage.setItem("nexora_restore_home_v1","1"); }catch(_){}
     try{ saveHomeState && saveHomeState(); }catch(_){}
-    window.location.href = "editor.html";
+    window.location.href = location.origin + "/editor.html";
   }
 
   // Keep latest generated templates (for tile click -> editor)
