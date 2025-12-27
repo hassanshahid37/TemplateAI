@@ -1179,6 +1179,269 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
       setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
     }catch(e){ console.warn("Export failed", e); }
   }
+  // === Canvas Export (V7) ===
+  // Renders current state.elements to a real <canvas> and downloads PNG/JPG.
+  async function exportImage(ev){
+    try{
+      // Stop any legacy handlers from firing (prevents JSON/notepad exports)
+      if(ev){
+        ev.preventDefault?.();
+        ev.stopPropagation?.();
+        ev.stopImmediatePropagation?.();
+      }
+
+      // Ask for scale + format (keeps your old "size options" idea)
+      const sizeRaw = (prompt("Export size? Type 1, 2, or 4 (default 2).", "2") || "").trim();
+      let scale = Number(sizeRaw || 2);
+      if(!Number.isFinite(scale) || ![1,2,4].includes(scale)) scale = 2;
+
+      const fmtRaw = (prompt("Export format: PNG or JPG", "PNG") || "").trim().toLowerCase();
+      const fmt = (fmtRaw === "jpg" || fmtRaw === "jpeg") ? "jpg" : "png";
+
+      const canvasW = Math.max(1, Math.floor((state.canvas?.w || 1080) * scale));
+      const canvasH = Math.max(1, Math.floor((state.canvas?.h || 1080) * scale));
+
+      const c = document.createElement("canvas");
+      c.width = canvasW;
+      c.height = canvasH;
+      const ctx = c.getContext("2d");
+      if(!ctx) throw new Error("Canvas context missing");
+
+      // High quality scaling
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.save();
+      ctx.scale(scale, scale);
+
+      // Optional background for JPG (avoid transparency)
+      if(fmt === "jpg"){
+        const bg = findBackgroundColor();
+        ctx.fillStyle = bg || "#ffffff";
+        ctx.fillRect(0,0,(state.canvas?.w||1080),(state.canvas?.h||1080));
+      }
+
+      // Draw elements (bg first)
+      const els = Array.isArray(state.elements) ? state.elements.slice() : [];
+      els.sort((a,b)=> (a?.type==="bg"?-1:0) - (b?.type==="bg"?-1:0));
+
+      // Preload images (blob/data URLs)
+      const imageCache = new Map();
+      for(const e of els){
+        if(String(e?.type).toLowerCase()==="image" && e?.src){
+          const img = await loadImageSafe(e.src);
+          if(img) imageCache.set(e.id, img);
+        }
+      }
+
+      for(const e of els){
+        drawElement(ctx, e, imageCache.get(e?.id));
+      }
+
+      ctx.restore();
+
+      // Export to blob + download
+      const mime = fmt === "jpg" ? "image/jpeg" : "image/png";
+      const quality = fmt === "jpg" ? 0.92 : undefined;
+
+      const blob = await new Promise((resolve)=> c.toBlob(resolve, mime, quality));
+      if(!blob) throw new Error("Export failed (blank blob)");
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = sanitizeFilename(state.title || "design") + "." + fmt;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    }catch(err){
+      console.warn("Image export failed", err);
+      alert("Export failed. Try again. If it keeps failing, tell me what you typed in the prompts.");
+    }
+  }
+
+  function sanitizeFilename(name){
+    return String(name||"design").trim().replace(/[\\/:*?"<>|]+/g,"-").slice(0,80) || "design";
+  }
+
+  function findBackgroundColor(){
+    // If there's a bg element, use its bg/fill color for JPG background
+    try{
+      const els = Array.isArray(state.elements) ? state.elements : [];
+      const bgEl = els.find(e=>String(e?.type).toLowerCase()==="bg" && (e?.bg || e?.fill || e?.color));
+      const c = bgEl?.bg || bgEl?.fill || bgEl?.color;
+      return (typeof c==="string" && c.trim()) ? c.trim() : null;
+    }catch{return null;}
+  }
+
+  function loadImageSafe(src){
+    return new Promise((resolve)=>{
+      try{
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = ()=> resolve(img);
+        img.onerror = ()=> resolve(null);
+        img.src = src;
+      }catch{ resolve(null); }
+    });
+  }
+
+  function drawElement(ctx, e, img){
+    if(!e) return;
+    const type = String(e.type||"").toLowerCase();
+    const x = Number(e.x||0), y = Number(e.y||0), w = Number(e.w||0), h = Number(e.h||0);
+    const opacity = (e.opacity==null)?1:Number(e.opacity);
+    ctx.save();
+    ctx.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
+
+    if(type==="bg"){
+      const fill = e.bg || e.fill || e.color || null;
+      fillRect(ctx, 0,0,(state.canvas?.w||1080),(state.canvas?.h||1080), fill, 0);
+      ctx.restore(); 
+      return;
+    }
+
+    if(type==="image" && img){
+      const r = Number(e.radius||0);
+      roundedClip(ctx, x, y, w, h, r);
+      drawFittedImage(ctx, img, x, y, w, h, (e.fit||"cover"));
+      ctx.restore();
+      return;
+    }
+
+    // Shapes for cards/badges/buttons/text backgrounds
+    const bg = e.bg;
+    const stroke = e.stroke || null;
+    const r = Number(e.radius||0);
+    if(bg && bg !== "transparent"){
+      fillRect(ctx, x, y, w, h, bg, r);
+    }
+    if(stroke){
+      strokeRect(ctx, x, y, w, h, stroke, r);
+    }
+
+    // Text rendering
+    const title = (e.title==null) ? "" : String(e.title);
+    const subtitle = (e.subtitle==null) ? "" : String(e.subtitle);
+    const color = (typeof e.color === "string" && e.color.trim()) ? e.color.trim() : "rgba(255,255,255,0.92)";
+    const fontSize = Math.max(8, Number(e.fontSize||22));
+    const weight = Math.max(300, Number(e.weight||700));
+
+    const pad = 16;
+    let cursorY = y + pad + fontSize;
+    if(title && type!=="image"){
+      ctx.fillStyle = color;
+      ctx.font = `${weight} ${fontSize}px Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      cursorY = drawWrappedText(ctx, title, x+pad, y+pad, w-pad*2, fontSize*1.25);
+    }
+    if(subtitle && type!=="image"){
+      ctx.fillStyle = color;
+      ctx.globalAlpha = ctx.globalAlpha * 0.85;
+      const subSize = Math.max(10, Math.round(fontSize * 0.72));
+      ctx.font = `600 ${subSize}px Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      drawWrappedText(ctx, subtitle, x+pad, cursorY+6, w-pad*2, subSize*1.22);
+    }
+
+    ctx.restore();
+  }
+
+  function cssToFill(ctx, fill, x,y,w,h){
+    const f = String(fill||"").trim();
+    if(!f) return null;
+    if(f.startsWith("linear-gradient")){
+      // Very small parser: uses first 2 colors
+      const colors = f.match(/(rgba?\([^\)]+\)|#[0-9a-fA-F]{3,8})/g) || [];
+      const c1 = colors[0] || "#0b1020";
+      const c2 = colors[1] || c1;
+      const g = ctx.createLinearGradient(x,y,x+w,y+h);
+      g.addColorStop(0,c1); g.addColorStop(1,c2);
+      return g;
+    }
+    return f;
+  }
+
+  function fillRect(ctx, x,y,w,h, fill, r){
+    const f = cssToFill(ctx, fill, x,y,w,h);
+    if(!f) return;
+    if(r>0){
+      roundedPath(ctx, x,y,w,h,r);
+      ctx.fillStyle = f;
+      ctx.fill();
+    }else{
+      ctx.fillStyle = f;
+      ctx.fillRect(x,y,w,h);
+    }
+  }
+
+  function strokeRect(ctx, x,y,w,h, stroke, r){
+    const s = cssToFill(ctx, stroke, x,y,w,h);
+    if(!s) return;
+    ctx.strokeStyle = s;
+    ctx.lineWidth = 2;
+    if(r>0){
+      roundedPath(ctx, x,y,w,h,r);
+      ctx.stroke();
+    }else{
+      ctx.strokeRect(x,y,w,h);
+    }
+  }
+
+  function roundedPath(ctx, x,y,w,h,r){
+    r = Math.max(0, Math.min(r, Math.min(w,h)/2));
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+
+  function roundedClip(ctx, x,y,w,h,r){
+    roundedPath(ctx,x,y,w,h,r);
+    ctx.clip();
+  }
+
+  function drawFittedImage(ctx, img, x,y,w,h, fit){
+    const mode = String(fit||"cover").toLowerCase();
+    const iw = img.naturalWidth || img.width || 1;
+    const ih = img.naturalHeight || img.height || 1;
+    if(mode==="contain"){
+      const s = Math.min(w/iw, h/ih);
+      const dw = iw*s, dh = ih*s;
+      const dx = x + (w-dw)/2;
+      const dy = y + (h-dh)/2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      return;
+    }
+    // cover default
+    const s = Math.max(w/iw, h/ih);
+    const dw = iw*s, dh = ih*s;
+    const dx = x + (w-dw)/2;
+    const dy = y + (h-dh)/2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  function drawWrappedText(ctx, text, x, y, maxW, lineH){
+    const words = String(text).replace(/\s+/g," ").trim().split(" ");
+    let line = "";
+    let cursorY = y;
+    for(let i=0;i<words.length;i++){
+      const test = line ? (line + " " + words[i]) : words[i];
+      const w = ctx.measureText(test).width;
+      if(w > maxW && line){
+        ctx.fillText(line, x, cursorY);
+        line = words[i];
+        cursorY += lineH;
+      }else{
+        line = test;
+      }
+    }
+    if(line) ctx.fillText(line, x, cursorY);
+    return cursorY;
+  }
+
+
 
   function applyGrid(){
     if(!gridOverlay) return;
@@ -1239,7 +1502,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   $("#duplicateBtn")?.addEventListener("click", duplicateSelected);
   $("#undoBtn")?.addEventListener("click", undo);
   $("#redoBtn")?.addEventListener("click", redo);
-  $("#exportBtn")?.addEventListener("click", exportJSON);
+  $("#exportBtn")?.addEventListener("click", exportImage);
   // Import Image (instant render, browser-safe)
   (function(){
     if(window.__IMPORT_IMAGE_SPLIT_V2__) return;
