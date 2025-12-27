@@ -438,6 +438,17 @@
 }
 </style>
 
+
+<style>
+/* === FIX OVERLAY BLOCKING CLICKS === */
+.canvas-overlay,
+.visual-overlay,
+.guide-overlay,
+.stage-overlay {
+  pointer-events: none !important;
+}
+</style>
+
 </head>
 
 <body data-theme="dark">
@@ -534,1087 +545,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   </aside>
 </div>
 
-<script>
-(() => {
-  const $ = (s, el=document) => el.querySelector(s);
-  const $$ = (s, el=document) => [...el.querySelectorAll(s)];
-
-  // Theme
-  const savedTheme = localStorage.getItem("templify_theme");
-  if(savedTheme==="light"||savedTheme==="dark") document.body.setAttribute("data-theme", savedTheme);
-
-  function setTheme(next){
-    document.body.setAttribute("data-theme", next);
-    localStorage.setItem("templify_theme", next);
-  }
-
-  // Draft meta from index (supports both legacy + current keys)
-  let draft = null;
-  let draftPrompt = "";
-  let draftNotes = "";
-
-  // 1) Preferred: settings saved by index
-  try{
-    const s = JSON.parse(localStorage.getItem("nexora_last_settings_v1")||"null");
-    if(s && typeof s === "object"){
-      draftPrompt = String(s.prompt||"");
-      draftNotes  = String(s.notes||"");
-    }
-  }catch(e){}
-
-  // 2) Current: selected template saved by index
-  try{
-    const t = JSON.parse(localStorage.getItem("nexora_selected_template_v1")||"null");
-    if(t && typeof t === "object"){
-      draft = { template: t, prompt: draftPrompt, notes: draftNotes };
-    }
-  }catch(e){}
-
-  // 3) Legacy: older key
-  if(!draft){
-    try{ draft = JSON.parse(localStorage.getItem("templify_draft")||"null"); }catch(e){}
-  }
-const title = draft?.meta?.cat ? `${draft.meta.cat} • ${draft.meta.style || "Style"}` : "Untitled";
-  $("#docTitle").textContent = title;
-
-  // State
-  const canvas = $("#canvas");
-  const stage = $("#stage");
-  const gridOverlay = $("#gridOverlay");
-  let zoom = 1;
-  let gridOn = true;
-  let autoFitZoom = true; // keep canvas comfortably inside stage (Canva-like)
-  let docW = 980, docH = 620, docBg = "";
-
-  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
-
-  function fitZoomToStage(force=false){
-    if(!force && !autoFitZoom) return;
-    // stage is the center viewport; leave some padding so doc is smaller than background
-    const r = stage.getBoundingClientRect();
-    const pad = 46; // visual breathing room
-    const availW = Math.max(200, r.width - pad*2);
-    const availH = Math.max(200, r.height - pad*2);
-
-    const zW = availW / Math.max(1, docW);
-    const zH = availH / Math.max(1, docH);
-    const next = clamp(Math.min(zW, zH) * 0.96, 0.08, 1.25);
-
-    if(Number.isFinite(next) && Math.abs(next - zoom) > 0.001){
-      zoom = next;
-      try{ $("#zoomPill").textContent = Math.round(zoom*100) + "%"; }catch(_){}
-    }
-  }
-const state = {
-    elements: [],
-    selectedIds: new Set(),
-    history: [],
-    future: [],
-    autosave: true,
-  };
-
-  // Load a generated template (if provided by index)
-  try{
-    if(draft?.template?.elements && Array.isArray(draft.template.elements)){
-      state.elements = draft.template.elements.map(e => ({
-        id: e.id || uid(),
-        x: Number(e.x ?? 80), y: Number(e.y ?? 80),
-        w: Number(e.w ?? 420), h: Number(e.h ?? 120),
-        title: String(e.title ?? e.text ?? "TEXT"),
-        sub: String(e.sub ?? e.subtitle ?? "")
-      }));
-    }
-  }catch(e){}
-
-
-  // Helpers
-  function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
-
-  function snapshot(){
-    const snap = JSON.stringify({
-      elements: state.elements,
-      selected: [...state.selectedIds],
-      zoom, gridOn
-    });
-    state.history.push(snap);
-    if(state.history.length>100) state.history.shift();
-    state.future.length = 0;
-  }
-
-  function restore(snap){
-    const obj = JSON.parse(snap);
-    state.elements = obj.elements || [];
-    state.selectedIds = new Set(obj.selected || []);
-    zoom = obj.zoom ?? zoom;
-    gridOn = obj.gridOn ?? gridOn;
-    renderAll();
-    updateUI();
-  }
-
-  function autosave(){
-    if(!state.autosave) return;
-    const payload = {
-      v: 1,
-      savedAt: Date.now(),
-      docTitle: $("#docTitle").textContent,
-      elements: state.elements
-    };
-    localStorage.setItem("templify_autosave", JSON.stringify(payload));
-    $("#autosavePill").textContent = "Autosave ON";
-  }
-
-  let autosaveTimer = null;
-  function scheduleAutosave(){
-    clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(autosave, 250);
-  }
-
-  // Init content
-  
-  // --- Nexora: load generated templates from index (handoff) ---
-  function getDraftTemplatePayload(){
-    // draft can be:
-    //  A) { template: {meta, template:{elements,canvas}} }   (index handoff wrapper)
-    //  B) { template: {elements,canvas} }                   (direct)
-    //  C) legacy shapes
-    const t = draft?.template || null;
-    if(!t || typeof t !== "object") return null;
-    if(t.elements && Array.isArray(t.elements)) return t;              // direct
-    if(t.template && t.template.elements && Array.isArray(t.template.elements)) return t.template; // wrapped
-    return null;
-  }
-
-  function normalizeEditorElements(arr){
-    // Ensure every element has required geometry + id + type
-    const out = [];
-    for(const raw of (arr||[])){
-      if(!raw || typeof raw !== "object") continue;
-      const el = { ...raw };
-      el.id = String(el.id || uid());
-      el.type = String(el.type || el.kind || el.element || "shape");
-      // geometry defaults
-      el.x = Number.isFinite(el.x) ? el.x : 0;
-      el.y = Number.isFinite(el.y) ? el.y : 0;
-      el.w = Number.isFinite(el.w) ? el.w : (Number.isFinite(el.width) ? el.width : 200);
-      el.h = Number.isFinite(el.h) ? el.h : (Number.isFinite(el.height) ? el.height : 120);
-      // z
-      if(!Number.isFinite(el.zIndex) && Number.isFinite(el.z)) el.zIndex = el.z;
-      // text fallback
-      if(typeof el.text === "string" && typeof el.title !== "string") el.title = el.text;
-      if(typeof el.subtitle === "string" && typeof el.sub !== "string") el.sub = el.subtitle;
-      if(typeof el.sub !== "string") el.sub = "";
-      if(typeof el.title !== "string") el.title = "";
-      out.push(el);
-    }
-    // stable ordering by zIndex then y then x
-    out.sort((a,b)=> (Number(a.zIndex||0)-Number(b.zIndex||0)) || (a.y-b.y) || (a.x-b.x));
-    return out;
-  }
-function addElement(x=80, y=80, w=260, h=130, title="Premium Title", sub="Add your text here…"){
-    const id = uid();
-    state.elements.push({ id, x, y, w, h, title, sub });
-    snapshot();
-    renderAll();
-    selectOnly(id);
-    scheduleAutosave();
-  }
-
-  function loadAutosaveOrSeed(){
-    // 0) If we arrived from Generator, load that template first (ignore autosave)
-    const incoming = getDraftTemplatePayload();
-    if(incoming?.elements?.length){
-      // document size
-      if(incoming.canvas && Number.isFinite(incoming.canvas.w) && Number.isFinite(incoming.canvas.h)){
-        docW = Math.max(200, Math.floor(incoming.canvas.w));
-        docH = Math.max(200, Math.floor(incoming.canvas.h));
-      }
-      // normalize + load
-      state.elements = normalizeEditorElements(incoming.elements);
-
-      // Clear selection and render
-      snapshot();
-      state.selectedIds.clear();
-      fitZoomToStage(true);
-      renderAll();
-      updateUI();
-
-      // Mark that we loaded a generated template (optional)
-      try{ localStorage.setItem("nexora_editor_loaded_v1", String(Date.now())); }catch(e){}
-      $("#autosavePill").textContent = "Autosave ON";
-      return;
-    }
-
-    let saved = null;
-    try{ saved = JSON.parse(localStorage.getItem("templify_autosave")||"null"); }catch(e){}
-    if(saved?.elements?.length){
-      state.elements = saved.elements;
-      snapshot();
-      fitZoomToStage(true);
-      renderAll();
-      state.selectedIds.clear();
-      updateUI();
-      $("#autosavePill").textContent = "Autosave ON";
-      return;
-    }
-
-    // Seed
-    addElement(90, 92, 320, 150, draft?.meta?.notes ? draft.meta.notes.slice(0,32) : "Luxury Template", "Drag, resize, duplicate…");
-    addElement(470, 210, 360, 170, "Modern Card", "Click elements to edit properties.");
-    fitZoomToStage(true);
-    renderAll();
-    updateUI();
-  }
-
-  // Render
-  function renderAll(){
-    // Keep grid overlay
-    const kids = [...canvas.children].filter(n => n !== gridOverlay);
-    kids.forEach(n => n.remove());
-    gridOverlay.style.display = gridOn ? "block" : "none";
-    canvas.style.transform = `scale(${zoom})`;
-    canvas.style.width = `${docW}px`;
-    canvas.style.height = `${docH}px`;
-
-    for(const el of state.elements){
-      const div = document.createElement("div");
-      div.className = "el";
-      div.dataset.id = el.id;
-      div.style.left = el.x + "px";
-      div.style.top = el.y + "px";
-      div.style.width = el.w + "px";
-      div.style.height = el.h + "px";
-
-      div.style.zIndex = String(el.zIndex ?? el.z ?? 0);
-
-      const t = String(el.type || "card");
-      // reset visuals
-      div.style.background = "";
-      div.style.backgroundImage = "";
-      div.style.backgroundSize = "";
-      div.style.backgroundPosition = "";
-      div.style.border = "";
-      div.style.borderRadius = "";
-      div.style.boxShadow = "";
-      div.style.color = "";
-      div.style.display = "";
-      div.style.alignItems = "";
-      div.style.justifyContent = "";
-      div.style.textAlign = "";
-      div.style.padding = "";
-
-      if(t === "background"){
-        div.innerHTML = "";
-        div.style.left = (Number.isFinite(el.x) ? el.x : 0) + "px";
-        div.style.top  = (Number.isFinite(el.y) ? el.y : 0) + "px";
-        div.style.width  = (Number.isFinite(el.w) ? el.w : docW) + "px";
-        div.style.height = (Number.isFinite(el.h) ? el.h : docH) + "px";
-        div.style.background = el.gradient || el.fill || el.color || "linear-gradient(135deg,#0a1433,#061022)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-      } else if(t === "image"){
-        div.innerHTML = "";
-        const src = el.src || el.url || "";
-        if(src) div.style.backgroundImage = `url("${String(src).replace(/"/g,'%22')}")`;
-        div.style.backgroundSize = "cover";
-        div.style.backgroundPosition = "center";
-        div.style.backgroundColor = el.fill || "rgba(255,255,255,0.06)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-      } else if(t === "shape"){
-        div.innerHTML = "";
-        div.style.background = el.gradient || el.fill || el.color || "rgba(255,255,255,0.06)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-        if(Number.isFinite(el.opacity)) div.style.opacity = String(el.opacity);
-      } else if(t === "heading" || t === "text"){
-        const txt = el.text ?? el.title ?? "";
-        const sub = el.sub ?? el.subtitle ?? "";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize: (t==='heading'?44:22)}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:(t==='heading'?800:500)}; line-height:${Number.isFinite(el.lineHeight)?el.lineHeight:1.1}; letter-spacing:${Number.isFinite(el.letterSpacing)?el.letterSpacing:0}px;">${escapeHtml(txt)}</div>` +
-                        (sub ? `<div style="margin-top:10px; font-size:${Math.max(14, Math.round((Number.isFinite(el.fontSize)?el.fontSize:22)*0.55))}px; opacity:0.85;">${escapeHtml(sub)}</div>` : "");
-        div.style.background = el.fill || "transparent";
-        div.style.color = el.color || "#eaf0ff";
-        div.style.padding = (Number.isFinite(el.padding)? el.padding : 18) + "px";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-      } else if(t === "badge"){
-        const txt = el.text ?? el.title ?? "BADGE";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize:14}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:700}; letter-spacing:${Number.isFinite(el.letterSpacing)?el.letterSpacing:1.2}px; text-transform:uppercase;">${escapeHtml(txt)}</div>`;
-        div.style.background = el.fill || "rgba(255,255,255,0.10)";
-        div.style.color = el.color || "#eaf0ff";
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "center";
-        div.style.textAlign = "center";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 999) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-        if(Number.isFinite(el.opacity)) div.style.opacity = String(el.opacity);
-      } else if(t === "cta"){
-        const txt = el.text ?? el.title ?? "Shop Now";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize:16}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:800};">${escapeHtml(txt)}</div>`;
-        div.style.background = el.fill || "#0b5fff";
-        div.style.color = el.color || "#ffffff";
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "center";
-        div.style.textAlign = "center";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 999) + "px";
-      } else {
-        // Default: existing card behavior
-        div.innerHTML = `<h4>${escapeHtml(el.title)}</h4><p>${escapeHtml(el.sub)}</p>`;
-      }
-
-      if(el.shadow){
-        div.style.boxShadow = String(el.shadow);
-      }
-
-      if(state.selectedIds.has(el.id)) div.classList.add("selected");
-      canvas.appendChild(div);
-      wireElement(div);
-    }
-  }
-
-  
-  // Initial paint
-  renderAll();
-  updateUI();
-
-function escapeHtml(str){
-    return String(str??"").replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-  }
-
-  function updateUI(){
-    $("#zoomPill").textContent = Math.round(zoom*100) + "%";
-    gridOverlay.style.display = gridOn ? "block" : "none";
-
-    const sel = getSingleSelected();
-    if(!sel){
-      $("#propX").value = "";
-      $("#propY").value = "";
-      $("#propW").value = "";
-      $("#propH").value = "";
-      $("#propTitle").value = "";
-      $("#propSub").value = "";
-      return;
-    }
-    $("#propX").value = sel.x;
-    $("#propY").value = sel.y;
-    $("#propW").value = sel.w;
-    $("#propH").value = sel.h;
-    $("#propTitle").value = sel.title;
-    $("#propSub").value = sel.sub;
-  }
-
-  function getById(id){ return state.elements.find(e => e.id === id); }
-  function getSingleSelected(){
-    const ids = [...state.selectedIds];
-    if(ids.length !== 1) return null;
-    return getById(ids[0]) || null;
-  }
-
-  function selectOnly(id){
-    state.selectedIds.clear();
-    state.selectedIds.add(id);
-    renderAll();
-    updateUI();
-  }
-
-  function toggleSelect(id){
-    if(state.selectedIds.has(id)) state.selectedIds.delete(id);
-    else state.selectedIds.add(id);
-    renderAll();
-    updateUI();
-  }
-
-  // Element interactions (drag move)
-  function wireElement(div){
-    div.addEventListener("mousedown", (e)=>{
-      e.preventDefault();
-      const id = div.dataset.id;
-      const multi = e.shiftKey;
-      if(multi) toggleSelect(id);
-      else if(!state.selectedIds.has(id)) selectOnly(id);
-
-      const startX = e.clientX, startY = e.clientY;
-      const ids = [...state.selectedIds];
-      const startPos = ids.map(pid => {
-        const el = getById(pid);
-        return { id: pid, x: el.x, y: el.y };
-      });
-
-      const onMove = (ev)=>{
-        const dx = (ev.clientX - startX) / zoom;
-        const dy = (ev.clientY - startY) / zoom;
-        for(const p of startPos){
-          const el = getById(p.id);
-          el.x = Math.round(p.x + dx);
-          el.y = Math.round(p.y + dy);
-        }
-        renderAll();
-        updateUI();
-      };
-      const onUp = ()=>{
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        snapshot();
-        scheduleAutosave();
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    });
-  }
-
-  // Panels tabs content
-  const leftData = {
-    templates: [
-      { t:"Instagram Post", d:"1080×1080 modern layout" },
-      { t:"YouTube Thumbnail", d:"Bold headline + image zone" },
-      { t:"Flyer", d:"A4 / Letter ready for print" },
-      { t:"Business Card", d:"Clean premium brand card" },
-      { t:"Story", d:"1080×1920 vertical" },
-    ],
-    layers: [],
-    assets: [
-      { t:"Shapes Pack", d:"Modern blobs & lines" },
-      { t:"Gradients", d:"Premium backgrounds" },
-      { t:"Icons", d:"Minimal icon set" },
-    ]
-  };
-
-  function refreshLeft(){
-    const active = $("#leftTabs .chip.active")?.dataset.tab || "templates";
-    // layers reflect elements
-    leftData.layers = state.elements.map((e, idx)=>({ t: e.title || `Layer ${idx+1}`, d: `x:${e.x} y:${e.y} • ${e.w}×${e.h}` , id: e.id }));
-    const q = ($("#leftSearch").value || "").toLowerCase().trim();
-    const list = $("#leftList");
-    list.innerHTML = "";
-    for(const it of leftData[active]){
-      const show = !q || (it.t.toLowerCase().includes(q) || it.d.toLowerCase().includes(q));
-      if(!show) continue;
-      const div = document.createElement("div");
-      div.className = "item";
-      div.innerHTML = `<b>${escapeHtml(it.t)}</b><span>${escapeHtml(it.d)}</span>`;
-      div.addEventListener("click", ()=>{
-        if(active === "templates"){
-          // load template preset
-          if(it.t.includes("Story")) resizeCanvas(900, 1400);
-          else if(it.t.includes("Flyer")) resizeCanvas(900, 1200);
-          else resizeCanvas(980, 620);
-        }else if(active === "layers" && it.id){
-          selectOnly(it.id);
-        }else if(active === "assets"){
-          addElement(120, 120, 260, 120, it.t, it.d);
-        }
-      });
-      list.appendChild(div);
-    }
-  }
-
-  function resizeCanvas(w,h){
-    // simple: change canvas size by modifying base dims used in renderAll
-    // We'll store in state as special element? Keep lightweight: store in localStorage
-    localStorage.setItem("templify_canvas_size", JSON.stringify({w,h}));
-    baseCanvas.w = w; baseCanvas.h = h;
-    snapshot();
-    renderAll();
-    scheduleAutosave();
-  }
-
-  const baseCanvas = { w: 980, h: 620 };
-  function loadCanvasSize(){
-    try{
-      const s = JSON.parse(localStorage.getItem("templify_canvas_size")||"null");
-      if(s?.w && s?.h){ baseCanvas.w = s.w; baseCanvas.h = s.h; }
-    }catch(e){}
-  }
-
-  // Override renderAll to use baseCanvas
-  const _renderAll = renderAll;
-  renderAll = function(){
-    const kids = [...canvas.children].filter(n => n !== gridOverlay);
-    kids.forEach(n => n.remove());
-    gridOverlay.style.display = gridOn ? "block" : "none";
-    canvas.style.transform = `scale(${zoom})`;
-    canvas.style.width = `${baseCanvas.w}px`;
-    canvas.style.height = `${baseCanvas.h}px`;
-
-    for(const el of state.elements){
-      const div = document.createElement("div");
-      div.className = "el";
-      div.dataset.id = el.id;
-      div.style.left = el.x + "px";
-      div.style.top = el.y + "px";
-      div.style.width = el.w + "px";
-      div.style.height = el.h + "px";
-
-      div.style.zIndex = String(el.zIndex ?? el.z ?? 0);
-
-      const t = String(el.type || "card");
-      // reset visuals
-      div.style.background = "";
-      div.style.backgroundImage = "";
-      div.style.backgroundSize = "";
-      div.style.backgroundPosition = "";
-      div.style.border = "";
-      div.style.borderRadius = "";
-      div.style.boxShadow = "";
-      div.style.color = "";
-      div.style.display = "";
-      div.style.alignItems = "";
-      div.style.justifyContent = "";
-      div.style.textAlign = "";
-      div.style.padding = "";
-
-      if(t === "background"){
-        div.innerHTML = "";
-        div.style.left = (Number.isFinite(el.x) ? el.x : 0) + "px";
-        div.style.top  = (Number.isFinite(el.y) ? el.y : 0) + "px";
-        div.style.width  = (Number.isFinite(el.w) ? el.w : docW) + "px";
-        div.style.height = (Number.isFinite(el.h) ? el.h : docH) + "px";
-        div.style.background = el.gradient || el.fill || el.color || "linear-gradient(135deg,#0a1433,#061022)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-      } else if(t === "image"){
-        div.innerHTML = "";
-        const src = el.src || el.url || "";
-        if(src) div.style.backgroundImage = `url("${String(src).replace(/"/g,'%22')}")`;
-        div.style.backgroundSize = "cover";
-        div.style.backgroundPosition = "center";
-        div.style.backgroundColor = el.fill || "rgba(255,255,255,0.06)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-      } else if(t === "shape"){
-        div.innerHTML = "";
-        div.style.background = el.gradient || el.fill || el.color || "rgba(255,255,255,0.06)";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-        if(Number.isFinite(el.opacity)) div.style.opacity = String(el.opacity);
-      } else if(t === "heading" || t === "text"){
-        const txt = el.text ?? el.title ?? "";
-        const sub = el.sub ?? el.subtitle ?? "";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize: (t==='heading'?44:22)}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:(t==='heading'?800:500)}; line-height:${Number.isFinite(el.lineHeight)?el.lineHeight:1.1}; letter-spacing:${Number.isFinite(el.letterSpacing)?el.letterSpacing:0}px;">${escapeHtml(txt)}</div>` +
-                        (sub ? `<div style="margin-top:10px; font-size:${Math.max(14, Math.round((Number.isFinite(el.fontSize)?el.fontSize:22)*0.55))}px; opacity:0.85;">${escapeHtml(sub)}</div>` : "");
-        div.style.background = el.fill || "transparent";
-        div.style.color = el.color || "#eaf0ff";
-        div.style.padding = (Number.isFinite(el.padding)? el.padding : 18) + "px";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 18) + "px";
-      } else if(t === "badge"){
-        const txt = el.text ?? el.title ?? "BADGE";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize:14}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:700}; letter-spacing:${Number.isFinite(el.letterSpacing)?el.letterSpacing:1.2}px; text-transform:uppercase;">${escapeHtml(txt)}</div>`;
-        div.style.background = el.fill || "rgba(255,255,255,0.10)";
-        div.style.color = el.color || "#eaf0ff";
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "center";
-        div.style.textAlign = "center";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 999) + "px";
-        if(el.stroke) div.style.border = `1px solid ${el.stroke}`;
-        if(Number.isFinite(el.opacity)) div.style.opacity = String(el.opacity);
-      } else if(t === "cta"){
-        const txt = el.text ?? el.title ?? "Shop Now";
-        div.innerHTML = `<div style="font-size:${Number.isFinite(el.fontSize)?el.fontSize:16}px; font-weight:${Number.isFinite(el.fontWeight)?el.fontWeight:800};">${escapeHtml(txt)}</div>`;
-        div.style.background = el.fill || "#0b5fff";
-        div.style.color = el.color || "#ffffff";
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "center";
-        div.style.textAlign = "center";
-        div.style.borderRadius = (Number.isFinite(el.radius) ? el.radius : 999) + "px";
-      } else {
-        // Default: existing card behavior
-        div.innerHTML = `<h4>${escapeHtml(el.title)}</h4><p>${escapeHtml(el.sub)}</p>`;
-      }
-
-      if(el.shadow){
-        div.style.boxShadow = String(el.shadow);
-      }
-
-      if(state.selectedIds.has(el.id)) div.classList.add("selected");
-      canvas.appendChild(div);
-      wireElement(div);
-    }
-    refreshLeft();
-  }
-
-  // Splitter drag resize
-  function wireSplitter(splitter, side){
-    let dragging = false;
-    splitter.addEventListener("mousedown", (e)=>{
-      dragging = true;
-      e.preventDefault();
-      document.body.style.cursor = "col-resize";
-    });
-    window.addEventListener("mousemove", (e)=>{
-      if(!dragging) return;
-      const rect = document.body.getBoundingClientRect();
-      if(side === "left"){
-        const w = Math.max(240, Math.min(420, e.clientX));
-        document.documentElement.style.setProperty("--leftW", w + "px");
-      }else{
-        const w = Math.max(260, Math.min(460, rect.width - e.clientX));
-        document.documentElement.style.setProperty("--rightW", w + "px");
-      }
-    });
-    window.addEventListener("mouseup", ()=>{
-      if(!dragging) return;
-      dragging = false;
-      document.body.style.cursor = "";
-    });
-  }
-
-  // Toolbar actions
-  $("#backBtn").addEventListener("click", ()=>{ window.location.href = "index.html"; });
-  $("#themeBtn").addEventListener("click", ()=>{
-    const cur = document.body.getAttribute("data-theme") || "dark";
-    setTheme(cur==="dark" ? "light" : "dark");
-  });
-
-  $("#addBtn").addEventListener("click", ()=> addElement(140, 140, 300, 140, "New Card", "Edit me from the Properties panel."));
-  $("#duplicateBtn").addEventListener("click", ()=> duplicateSelected());
-  $("#deleteBtn").addEventListener("click", ()=> deleteSelected());
-
-  $("#undoBtn").addEventListener("click", undo);
-  $("#redoBtn").addEventListener("click", redo);
-
-  $("#zoomInBtn").addEventListener("click", ()=> setZoom(zoom * 1.1, true));
-  $("#zoomOutBtn").addEventListener("click", ()=> setZoom(zoom / 1.1, true));
-
-  $("#toggleGridBtn").addEventListener("click", ()=>{
-    gridOn = !gridOn;
-    snapshot();
-    renderAll();
-    updateUI();
-    scheduleAutosave();
-  });
-
-  $("#exportBtn").addEventListener("click", exportDoc);
-
-  // Properties bindings
-  function bindProp(id, fn){
-    const el = $(id);
-    el.addEventListener("input", ()=>{
-      const sel = getSingleSelected();
-      if(!sel) return;
-      fn(sel, el.value);
-      renderAll();
-      scheduleAutosave();
-    });
-    el.addEventListener("change", ()=>{
-      snapshot();
-    });
-  }
-
-  bindProp("#propX", (s,v)=> s.x = parseInt(v||"0",10) || 0);
-  bindProp("#propY", (s,v)=> s.y = parseInt(v||"0",10) || 0);
-  bindProp("#propW", (s,v)=> s.w = Math.max(80, parseInt(v||"0",10) || 80));
-  bindProp("#propH", (s,v)=> s.h = Math.max(60, parseInt(v||"0",10) || 60));
-  bindProp("#propTitle", (s,v)=> s.title = String(v||""));
-  bindProp("#propSub", (s,v)=> s.sub = String(v||""));
-
-  // -----------------------------
-  // Phase G: Editor Intelligence
-  // -----------------------------
-
-  // Document settings
-  function applyDoc(){
-    docW = Math.max(200, Number($("#docW")?.value || 980));
-    docH = Math.max(200, Number($("#docH")?.value || 620));
-    docBg = String($("#docBg")?.value || "").trim();
-
-    canvas.style.width = docW + "px";
-    canvas.style.height = docH + "px";
-    if(docBg){
-      canvas.style.background = docBg;
-    }else{
-      canvas.style.background = "transparent";
-    }
-    renderAll();
-    updateUI();
-  }
-
-  $("#applyDocBtn")?.addEventListener("click", applyDoc);
-  $("#resetDocBtn")?.addEventListener("click", ()=>{
-    $("#docW").value = 980;
-    $("#docH").value = 620;
-    $("#docBg").value = "";
-    applyDoc();
-  });
-
-  // Prompt helpers
-  function getGeneratorPrompt(){
-    // Try draft first, then settings
-    if(draft && typeof draft.prompt === "string" && draft.prompt.trim()) return draft.prompt.trim();
-    try{
-      const s = JSON.parse(localStorage.getItem("nexora_last_settings_v1")||"null");
-      if(s && typeof s.prompt === "string") return s.prompt.trim();
-    }catch(e){}
-    return "";
-  }
-
-  function cleanText(s){
-    return String(s||"").replace(/\s+/g," ").trim();
-  }
-
-  function titleCaseWords(s){
-    const w = cleanText(s).split(" ").slice(0, 6);
-    return w.map(x=> x.length<=2 ? x.toUpperCase() : (x[0].toUpperCase()+x.slice(1))).join(" ");
-  }
-
-  function makeHeadline(prompt){
-    if(!prompt) return "New Collection";
-    const p = cleanText(prompt);
-    // Try split on punctuation
-    const first = p.split(/[\n\.\!\?]/)[0] || p;
-    return titleCaseWords(first);
-  }
-
-  function makeSubtitle(prompt){
-    if(!prompt) return "Premium • Ready";
-    const p = cleanText(prompt);
-    const parts = p.split(/[\n\.\!\?]/).map(x=>cleanText(x)).filter(Boolean);
-    if(parts.length>=2) return parts[1].slice(0, 64);
-    return (p.length>64 ? p.slice(0,64)+"…" : p);
-  }
-
-  function selectedOrAll(){
-    const ids = [...state.selectedIds];
-    if(ids.length) return state.elements.filter(e=>ids.includes(e.id));
-    return state.elements;
-  }
-
-  function applyPromptToDesign(){
-    const prompt = getGeneratorPrompt();
-    if(!prompt){
-      // no prompt: still keep stable
-      return;
-    }
-    snapshot();
-    const headline = makeHeadline(prompt);
-    const subtitle = makeSubtitle(prompt);
-
-    // Apply to first 2 text-like elements we find, otherwise to all as fallbacks
-    const targets = selectedOrAll();
-    let applied = 0;
-    for(const el of targets){
-      if(typeof el.title === "string" && applied === 0){
-        el.title = headline;
-        applied++;
-        continue;
-      }
-      if(typeof el.sub === "string" && applied <= 2){
-        el.sub = subtitle;
-        applied++;
-      }
-    }
-    // If nothing matched, set on first element
-    if(!applied && state.elements[0]){
-      state.elements[0].title = headline;
-      state.elements[0].sub = subtitle;
-    }
-
-    renderAll();
-    refreshLeft();
-    updateUI();
-  }
-
-  $("#smartApplyPrompt")?.addEventListener("click", applyPromptToDesign);
-
-  // Layout helpers
-  function smartCenter(){
-    const targets = selectedOrAll();
-    if(!targets.length) return;
-    snapshot();
-    const cx = docW/2, cy = docH/2;
-    const bb = targets.reduce((acc,e)=>{
-      acc.minX = Math.min(acc.minX, e.x);
-      acc.minY = Math.min(acc.minY, e.y);
-      acc.maxX = Math.max(acc.maxX, e.x + e.w);
-      acc.maxY = Math.max(acc.maxY, e.y + e.h);
-      return acc;
-    }, {minX:1e9, minY:1e9, maxX:-1e9, maxY:-1e9});
-    const bw = bb.maxX - bb.minX;
-    const bh = bb.maxY - bb.minY;
-    const dx = Math.round(cx - (bb.minX + bw/2));
-    const dy = Math.round(cy - (bb.minY + bh/2));
-    targets.forEach(e=>{ e.x += dx; e.y += dy; });
-    renderAll(); refreshLeft(); updateUI();
-  }
-
-  function smartTidy(){
-    const targets = selectedOrAll();
-    if(targets.length < 2) return;
-    snapshot();
-    // Sort top-to-bottom, then left-to-right
-    const sorted = [...targets].sort((a,b)=> (a.y-b.y) || (a.x-b.x));
-    // Determine row size by proximity on y
-    const rowGap = 22;
-    const colGap = 22;
-
-    let x = 60, y = 60, rowH = 0;
-    for(const e of sorted){
-      if(x + e.w > docW - 60){
-        x = 60;
-        y = y + rowH + rowGap;
-        rowH = 0;
-      }
-      e.x = x;
-      e.y = y;
-      x = x + e.w + colGap;
-      rowH = Math.max(rowH, e.h);
-    }
-    renderAll(); refreshLeft(); updateUI();
-  }
-
-  function smartDistribute(){
-    const targets = selectedOrAll();
-    if(targets.length < 3) return;
-    snapshot();
-    const sorted = [...targets].sort((a,b)=>a.x-b.x);
-    const left = sorted[0].x;
-    const right = sorted[sorted.length-1].x;
-    const span = right - left;
-    if(span <= 0) return;
-    const step = span / (sorted.length-1);
-    sorted.forEach((e,i)=>{ e.x = Math.round(left + step*i); });
-    renderAll(); refreshLeft(); updateUI();
-  }
-
-  $("#smartTidy")?.addEventListener("click", smartTidy);
-  $("#smartCenter")?.addEventListener("click", smartCenter);
-  $("#smartDistribute")?.addEventListener("click", smartDistribute);
-
-  // Typography helpers
-  $("#smartUpcase")?.addEventListener("click", ()=>{
-    const targets = selectedOrAll();
-    if(!targets.length) return;
-    snapshot();
-    targets.forEach(e=>{
-      if(typeof e.title === "string") e.title = e.title.toUpperCase();
-      if(typeof e.sub === "string") e.sub = e.sub.toUpperCase();
-    });
-    renderAll(); refreshLeft(); updateUI();
-  });
-
-  $("#smartShorten")?.addEventListener("click", ()=>{
-    const targets = selectedOrAll();
-    if(!targets.length) return;
-    snapshot();
-    targets.forEach(e=>{
-      if(typeof e.title === "string") e.title = cleanText(e.title).slice(0, 32);
-      if(typeof e.sub === "string") e.sub = cleanText(e.sub).slice(0, 64);
-    });
-    renderAll(); refreshLeft(); updateUI();
-  });
-
-  // Auto-apply prompt once when editor opens (non-destructive: only if we have a real prompt)
-  try{
-    if(getGeneratorPrompt()){
-      applyPromptToDesign();
-    }
-  }catch(e){}
-
-
-  // Keyboard shortcuts
-  window.addEventListener("resize", ()=>{ try{ fitZoomToStage(false); renderAll(); updateUI(); }catch(_){} });
-  window.addEventListener("keydown", (e)=>{
-    const isMac = navigator.platform.toLowerCase().includes("mac");
-    const ctrl = isMac ? e.metaKey : e.ctrlKey;
-
-    if(ctrl && (e.key.toLowerCase()==="d")){
-      e.preventDefault();
-      duplicateSelected();
-    }
-    if(ctrl && (e.key.toLowerCase()==="z")){
-      e.preventDefault();
-      undo();
-    }
-    if(ctrl && (e.key.toLowerCase()==="y")){
-      e.preventDefault();
-      redo();
-    }
-    if(e.key==="Delete"){
-      deleteSelected();
-    }
-  });
-
-  // Click empty canvas to clear selection
-  canvas.addEventListener("mousedown", (e)=>{
-    if(e.target === canvas || e.target === gridOverlay){
-      state.selectedIds.clear();
-      renderAll();
-      updateUI();
-    }
-  });
-
-  function duplicateSelected(){
-    const ids = [...state.selectedIds];
-    if(ids.length===0) return;
-    const newIds = [];
-    for(const id of ids){
-      const src = getById(id);
-      if(!src) continue;
-      const copy = { ...src, id: uid(), x: src.x + 24, y: src.y + 24 };
-      state.elements.push(copy);
-      newIds.push(copy.id);
-    }
-    snapshot();
-    state.selectedIds = new Set(newIds);
-    renderAll();
-    updateUI();
-    scheduleAutosave();
-  }
-
-  function deleteSelected(){
-    const ids = new Set(state.selectedIds);
-    if(ids.size===0) return;
-    state.elements = state.elements.filter(e => !ids.has(e.id));
-    state.selectedIds.clear();
-    snapshot();
-    renderAll();
-    updateUI();
-    scheduleAutosave();
-  }
-
-  function setZoom(z, user=false){
-    if(user) autoFitZoom = false;
-    zoom = clamp(Number(z)||1, 0.08, 2.2);
-    try{ $("#zoomPill").textContent = Math.round(zoom*100) + "%"; }catch(_){}
-    renderAll();
-    updateUI();
-  }
-
-  function fitZoomToView(){
-    // public helper: re-enable auto-fit and fit canvas into view
-    autoFitZoom = true;
-    fitZoomToStage(true);
-    renderAll();
-    updateUI();
-  }
-
-
-  function undo(){
-    if(state.history.length<=1) return;
-    const cur = state.history.pop();
-    state.future.push(cur);
-    const prev = state.history[state.history.length-1];
-    restore(prev);
-    scheduleAutosave();
-  }
-
-  function redo(){
-    if(state.future.length===0) return;
-    const snap = state.future.pop();
-    state.history.push(snap);
-    restore(snap);
-    scheduleAutosave();
-  }
-
-  function exportDoc(){
-    const payload = {
-      v: 1,
-      exportedAt: new Date().toISOString(),
-      title: $("#docTitle").textContent,
-      canvas: { w: baseCanvas.w, h: baseCanvas.h, zoom },
-      elements: state.elements
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "templify_export.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  // Left tabs
-  $("#leftTabs").addEventListener("click", (e)=>{
-    const chip = e.target.closest(".chip");
-    if(!chip) return;
-    $$("#leftTabs .chip").forEach(c => c.classList.remove("active"));
-    chip.classList.add("active");
-    refreshLeft();
-  });
-
-  // Right tabs (Selected / Document / Smart)
-  function showRightPane(tab){
-    $$("#rightTabs .chip").forEach(c => c.classList.toggle("active", c.dataset.tab === tab));
-    $$("#rightPanel .pane").forEach(p => p.classList.toggle("hidden", p.dataset.pane !== tab));
-  }
-
-  $("#rightTabs")?.addEventListener("click", (e)=>{
-    const chip = e.target.closest(".chip");
-    if(!chip) return;
-    showRightPane(chip.dataset.tab || "props");
-  });
-
-  // Default
-  showRightPane("props");
-
-
-  $("#leftSearch").addEventListener("input", refreshLeft);
-
-  // Wire splitters
-  wireSplitter($("#splitLeft"), "left");
-  wireSplitter($("#splitRight"), "right");
-
-  // Boot
-  loadCanvasSize();
-  snapshot(); // initial empty
-  loadAutosaveOrSeed();
-  refreshLeft();
-  updateUI();
-})();
-</script>
-
-<script>
-(function(){
-  function resetZoom(){
-    const canvas = document.getElementById('canvas');
-    if(!canvas) return;
-
-    // Remove any scale transforms applied by editor
-    canvas.style.transform = 'scale(1)';
-    canvas.style.transformOrigin = '0 0';
-
-    // Also reset parent wrappers if scaled
-    let p = canvas.parentElement;
-    while(p){
-      if(p.style && p.style.transform){
-        p.style.transform = 'scale(1)';
-        p.style.transformOrigin = '0 0';
-      }
-      p = p.parentElement;
-    }
-  }
-
-  // Run after template open
-  resetZoom();
-  setTimeout(resetZoom, 100);
-  setTimeout(resetZoom, 300);
-  setTimeout(resetZoom, 600);
-})();
-</script>
-
-
-<script>
-/* === NEW CANVAS LOGIC (REPLACED) === */
-(function(){
-  const canvas = document.getElementById('canvas');
-  if(canvas){
-    canvas.style.width = '880px';
-    canvas.style.height = '620px';
-    canvas.style.transform = 'none';
-  }
-
-  // Disable all legacy canvas controllers
-  window.resizeCanvas = function(){};
-  window.fitZoomToStage = function(){};
-  window.fitZoomToView = function(){};
-  window.resetZoom = function(){};
-
-  // Lock zoom
-  try{
-    if(window.zoom !== undefined) window.zoom = 1;
-    if(window.autoFitZoom !== undefined) window.autoFitZoom = false;
-  }catch(e){}
-
-})();
-</script>
+<!-- DISABLED: REPLACED SCRIPT -->
 
 <script>
 /* === Canva clone: left sidebar modes + selection->properties === */
@@ -1733,176 +664,424 @@ function escapeHtml(str){
 </script>
 
 <script>
-/* === FIX: Wire Canva-style buttons to existing editor logic === */
+/* SAFE NO-OP: rail buttons visual only */
 (function(){
-  // Helper to safely trigger original UI actions
-  function clickIfExists(sel){
-    const el = document.querySelector(sel);
-    if(el){ el.click(); return true; }
-    return false;
-  }
-
-  function callIfExists(name, args=[]){
-    if(typeof window[name] === 'function'){
-      window[name].apply(window, args);
-      return true;
-    }
-    return false;
-  }
-
-  // Map Canva rail modes to your existing editor capabilities
-  const MODE_MAP = {
-    design(){
-      // Prefer template view
-      return (
-        clickIfExists('[data-view="templates"]') ||
-        clickIfExists('#btnTemplates') ||
-        callIfExists('showTemplates') ||
-        true
-      );
-    },
-    elements(){
-      return (
-        clickIfExists('[data-view="elements"]') ||
-        clickIfExists('#btnElements') ||
-        callIfExists('showElements') ||
-        true
-      );
-    },
-    text(){
-      return (
-        clickIfExists('[data-view="text"]') ||
-        clickIfExists('#btnText') ||
-        callIfExists('addTextMode') ||
-        true
-      );
-    },
-    uploads(){
-      return (
-        clickIfExists('[data-view="uploads"]') ||
-        clickIfExists('#btnUploads') ||
-        callIfExists('showUploads') ||
-        true
-      );
-    },
-    projects(){
-      return (
-        clickIfExists('[data-view="projects"]') ||
-        clickIfExists('#btnProjects') ||
-        true
-      );
-    }
-  };
-
-  // Attach to rail
   const rail = document.getElementById('rail');
-  if(rail){
-    rail.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.railBtn');
-      if(!btn) return;
-      const mode = btn.dataset.mode;
-      if(MODE_MAP[mode]) MODE_MAP[mode]();
-    });
-  }
-
-  // Ensure canvas click deselects -> returns to Design mode
-  const canvas = document.getElementById('canvas');
-  if(canvas){
-    canvas.addEventListener('mousedown', ()=>{
-      if(window.__NEXORA_CANVA_CLONE__){
-        window.__NEXORA_CANVA_CLONE__.showDesignMode();
-      }
-    });
-  }
+  if(!rail) return;
+  rail.addEventListener('click', e=>{
+    const btn = e.target.closest('.railBtn');
+    if(!btn) return;
+    rail.querySelectorAll('.railBtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  });
 })();
 </script>
-
-
 <script>
-/* === GLOBAL EVENT DELEGATION FIX (Top + Left Bars) === */
+/* Nexora Editor Core – minimal, non-destructive controller
+   Fixes: toolbar buttons + keyboard shortcuts + draft load
+   Works with existing DOM (.canvas/#canvas, .el, .selected, #rightPanelBody)
+*/
 (function(){
-  function call(fn){
-    if(typeof window[fn] === 'function'){
-      window[fn]();
-      return true;
+  if(window.__NEXORA_EDITOR_CORE_V1__) return;
+  window.__NEXORA_EDITOR_CORE_V1__ = true;
+
+  const $ = (s)=>document.querySelector(s);
+  const canvasEl = $("#canvas");
+  const gridOverlay = $("#gridOverlay");
+  const rightPanelBody = $("#rightPanelBody");
+  const autosavePill = $("#autosavePill");
+
+  if(!canvasEl){ console.warn("Editor core: #canvas not found"); return; }
+
+  // Theme init
+  try{
+    const saved = localStorage.getItem("templify_theme");
+    if(saved) document.body.setAttribute("data-theme", saved);
+  }catch{}
+
+  const KEY_DRAFT = "templify_draft";
+  const KEY_SELECTED = "nexora_selected_template_v1";
+
+  const state = {
+    canvas: { w: 1080, h: 1080 },
+    title: "Untitled",
+    elements: [],
+    selected: new Set(),
+    zoom: 1,
+    grid: true,
+    history: [],
+    future: []
+  };
+
+  const uid = () => (globalThis.crypto?.randomUUID?.() || ("id_"+Math.random().toString(16).slice(2)+Date.now().toString(16)));
+  const safeParse = (s)=>{ try { return JSON.parse(s); } catch { return null; } };
+  const deepClone = (o)=>JSON.parse(JSON.stringify(o));
+
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function snapshot(){
+    return {
+      canvas: deepClone(state.canvas),
+      title: state.title,
+      elements: deepClone(state.elements),
+      selected: Array.from(state.selected),
+      zoom: state.zoom,
+      grid: state.grid
+    };
+  }
+
+  function pushHistory(){
+    state.history.push(snapshot());
+    if(state.history.length > 60) state.history.shift();
+    state.future.length = 0;
+  }
+
+  function restore(snap){
+    if(!snap) return;
+    state.canvas = snap.canvas || state.canvas;
+    state.title = snap.title || state.title;
+    state.elements = Array.isArray(snap.elements) ? snap.elements : state.elements;
+    state.selected = new Set(Array.isArray(snap.selected) ? snap.selected : []);
+    state.zoom = Number(snap.zoom || 1);
+    state.grid = !!snap.grid;
+    applyZoom();
+    applyGrid();
+    render();
+    renderProps();
+  }
+
+  function autosave(){
+    try{
+      const payload = {
+        meta: { title: state.title },
+        template: { title: state.title, canvas: state.canvas, elements: state.elements },
+        createdAt: Date.now()
+      };
+      localStorage.setItem(KEY_DRAFT, JSON.stringify(payload));
+      if(autosavePill){
+        autosavePill.textContent = "Saved";
+        setTimeout(()=>autosavePill.textContent="Autosave ON", 700);
+      }
+    }catch{}
+  }
+
+  function loadDraft(){
+    const draft = safeParse(localStorage.getItem(KEY_DRAFT) || "null");
+    const sel = safeParse(localStorage.getItem(KEY_SELECTED) || "null");
+    const tpl = (draft && draft.template) ? draft.template : sel;
+
+    if(tpl && Array.isArray(tpl.elements)){
+      state.title = tpl.title || "Untitled";
+      state.canvas = tpl.canvas || state.canvas;
+      state.elements = tpl.elements.map(e=>({
+        id: e.id || uid(),
+        type: (e.type || "card"),
+        x: Number(e.x ?? 80),
+        y: Number(e.y ?? 80),
+        w: Number(e.w ?? 240),
+        h: Number(e.h ?? 120),
+        title: String(e.title ?? e.text ?? "Text"),
+        subtitle: String(e.subtitle ?? ""),
+        bg: e.bg ?? e.fill ?? null,
+        color: e.color ?? "rgba(255,255,255,0.92)",
+        radius: Number(e.radius ?? 16),
+        opacity: Number(e.opacity ?? 1),
+        fontSize: Number(e.fontSize ?? e.size ?? 22),
+        weight: Number(e.weight ?? 700)
+      }));
+      state.selected.clear();
+    }else{
+      state.elements = [{
+        id: uid(), type:"text", x:120, y:120, w:420, h:120,
+        title:"Click to edit", subtitle:"",
+        bg:"rgba(11,95,255,0.18)", color:"rgba(255,255,255,0.92)",
+        radius:14, opacity:1, fontSize:28, weight:800
+      }];
     }
-    return false;
+
+    const titleChip = $("#docTitle");
+    if(titleChip) titleChip.textContent = state.title;
+
+    render();
+    renderProps();
   }
 
-  function clickSel(sel){
-    const el = document.querySelector(sel);
-    if(el){ el.click(); return true; }
-    return false;
+  function clearEls(){
+    canvasEl.querySelectorAll(".el").forEach(n=>n.remove());
   }
 
-  document.addEventListener('click', function(e){
-    const btn = e.target.closest('button, .btn, [role="button"], [data-action]');
-    if(!btn) return;
+  function render(){
+    clearEls();
+    state.elements.forEach(e=>{
+      const el = document.createElement("div");
+      el.className = "el";
+      el.dataset.id = e.id;
+      el.style.left = e.x + "px";
+      el.style.top  = e.y + "px";
+      el.style.width  = Math.max(30, e.w) + "px";
+      el.style.height = Math.max(20, e.h) + "px";
+      el.style.opacity = String(e.opacity ?? 1);
+      el.style.borderRadius = (e.radius ?? 14) + "px";
 
-    const label = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
+      if(e.type === "text"){
+        el.style.background = "rgba(255,255,255,0.06)";
+        el.style.borderColor = "rgba(255,255,255,0.14)";
+      }else if(e.type === "image"){
+        el.style.background = e.bg || "linear-gradient(135deg, rgba(11,95,255,.35), rgba(136,71,255,.25))";
+      }else{
+        el.style.background = e.bg || "rgba(11,95,255,0.18)";
+      }
 
-    // Top bar actions
-    if(label.includes('undo')){ call('undo'); return; }
-    if(label.includes('redo')){ call('redo'); return; }
-    if(label.includes('export')){ call('exportCanvas') || clickSel('#exportBtn'); return; }
-    if(label.includes('zoom')){
-      if(label.includes('+')) call('zoomIn');
-      else if(label.includes('-')) call('zoomOut');
+      el.style.color = e.color || "rgba(255,255,255,0.92)";
+      el.style.fontSize = (e.fontSize || 22) + "px";
+      el.style.fontWeight = String(e.weight || 700);
+      el.style.display = "flex";
+      el.style.flexDirection = "column";
+      el.style.justifyContent = "center";
+      el.style.gap = "4px";
+
+      el.innerHTML = `
+        <div style="line-height:1.12; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.title||"")}</div>
+        ${e.subtitle ? `<div style="font-size:12px; opacity:.72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.subtitle)}</div>` : ``}
+      `;
+
+      if(state.selected.has(e.id)) el.classList.add("selected");
+      canvasEl.appendChild(el);
+    });
+  }
+
+  // Selection + drag
+  let drag = null;
+  const hitIdFromEvent = (ev)=> ev.target?.closest?.(".el")?.dataset?.id || null;
+
+  canvasEl.addEventListener("mousedown", (ev)=>{
+    const id = hitIdFromEvent(ev);
+    if(!id){
+      state.selected.clear();
+      render(); renderProps();
       return;
     }
+    const isMulti = ev.shiftKey || ev.metaKey || ev.ctrlKey;
+    if(!isMulti) state.selected.clear();
+    if(state.selected.has(id) && isMulti) state.selected.delete(id);
+    else state.selected.add(id);
 
-    // Left design tabs
-    if(label.includes('template')){ call('showTemplates'); return; }
-    if(label.includes('element')){ call('showElements'); return; }
-    if(label.includes('text')){ call('addTextMode'); return; }
-    if(label.includes('upload')){ call('showUploads'); return; }
-  }, true);
-})();
-</script>
+    render(); renderProps();
 
+    if(state.selected.size === 1){
+      const e = state.elements.find(x=>x.id===id);
+      if(!e) return;
+      pushHistory();
+      drag = { id, sx: ev.clientX, sy: ev.clientY, ox: e.x, oy: e.y };
+      ev.preventDefault();
+    }
+  });
 
-<script>
-/* === SAFE DIRECT-OPEN BOOTSTRAP === */
-(function(){
-  // If editor state already exists (normal flow), do nothing
-  if (window.__EDITOR_BOOTSTRAPPED__) return;
+  window.addEventListener("mousemove", (ev)=>{
+    if(!drag) return;
+    const e = state.elements.find(x=>x.id===drag.id);
+    if(!e) return;
+    const dx = (ev.clientX - drag.sx) / state.zoom;
+    const dy = (ev.clientY - drag.sy) / state.zoom;
+    e.x = Math.round(drag.ox + dx);
+    e.y = Math.round(drag.oy + dy);
+    render();
+  });
 
-  // Detect missing core state
-  const needsBootstrap = (
-    typeof window.editorState === "undefined" ||
-    typeof window.currentDoc === "undefined"
-  );
+  window.addEventListener("mouseup", ()=>{
+    if(drag){ drag = null; autosave(); }
+  });
 
-  if (!needsBootstrap) return;
+  // Properties
+  function renderProps(){
+    if(!rightPanelBody) return;
+    rightPanelBody.innerHTML = "";
+    if(state.selected.size !== 1){
+      const msg = document.createElement("div");
+      msg.style.color = "var(--muted)";
+      msg.style.fontSize = "12px";
+      msg.textContent = state.selected.size ? "Multiple selected (Shift+Click). Use toolbar to duplicate/delete." : "No selection. Click an element to edit.";
+      rightPanelBody.appendChild(msg);
+      return;
+    }
+    const id = Array.from(state.selected)[0];
+    const e = state.elements.find(x=>x.id===id);
+    if(!e) return;
 
-  // Minimal compatible state (matches existing expectations)
-  window.editorState = window.editorState || {
-    mode: "design",
-    zoom: 1,
-    selected: null
-  };
+    const wrap = document.createElement("div");
+    wrap.className = "propGrid";
+    wrap.innerHTML = `
+      <div class="field"><label>Title</label><input id="propTitle" value="${escapeHtml(e.title||"")}" /></div>
+      <div class="field"><label>Subtitle</label><input id="propSub" value="${escapeHtml(e.subtitle||"")}" /></div>
+      <div class="row2">
+        <div class="field"><label>X</label><input id="propX" type="number" value="${e.x}"></div>
+        <div class="field"><label>Y</label><input id="propY" type="number" value="${e.y}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>W</label><input id="propW" type="number" value="${e.w}"></div>
+        <div class="field"><label>H</label><input id="propH" type="number" value="${e.h}"></div>
+      </div>
+    `;
+    rightPanelBody.appendChild(wrap);
 
-  window.currentDoc = window.currentDoc || {
-    pages: [],
-    activePage: 0
-  };
-
-  // Flags used by existing logic
-  window.autoFitZoom = false;
-  window.zoom = window.editorState.zoom;
-
-  // Call existing init hooks if present
-  if (typeof window.initEditor === "function") {
-    try { window.initEditor(); } catch(e){}
+    const bind = (id, fn)=>{
+      const inp = $("#"+id);
+      if(!inp) return;
+      inp.addEventListener("input", ()=>{
+        pushHistory();
+        fn(inp.value);
+        render();
+        autosave();
+      });
+    };
+    bind("propTitle", v=> e.title = String(v));
+    bind("propSub", v=> e.subtitle = String(v));
+    bind("propX", v=> e.x = Number(v)||0);
+    bind("propY", v=> e.y = Number(v)||0);
+    bind("propW", v=> e.w = Math.max(30, Number(v)||30));
+    bind("propH", v=> e.h = Math.max(20, Number(v)||20));
   }
-  if (typeof window.renderUI === "function") {
-    try { window.renderUI(); } catch(e){}
-  }
-  if (typeof window.showTemplates === "function") {
-    try { window.showTemplates(); } catch(e){}
+
+  // Actions
+  function addElement(){
+    pushHistory();
+    const id = uid();
+    state.elements.push({
+      id, type:"text", x:140, y:140, w:420, h:120,
+      title:"New Text", subtitle:"",
+      bg:"rgba(11,95,255,0.18)", color:"rgba(255,255,255,0.92)",
+      radius:14, opacity:1, fontSize:26, weight:800
+    });
+    state.selected.clear();
+    state.selected.add(id);
+    render(); renderProps(); autosave();
   }
 
-  window.__EDITOR_BOOTSTRAPPED__ = true;
+  function deleteSelected(){
+    if(!state.selected.size) return;
+    pushHistory();
+    const ids = new Set(state.selected);
+    state.elements = state.elements.filter(e=>!ids.has(e.id));
+    state.selected.clear();
+    render(); renderProps(); autosave();
+  }
+
+  function duplicateSelected(){
+    if(!state.selected.size) return;
+    pushHistory();
+    const sel = Array.from(state.selected);
+    const clones = [];
+    sel.forEach(id=>{
+      const e = state.elements.find(x=>x.id===id);
+      if(!e) return;
+      const c = deepClone(e);
+      c.id = uid();
+      c.x = Number(c.x||0) + 18;
+      c.y = Number(c.y||0) + 18;
+      clones.push(c);
+    });
+    state.elements.push(...clones);
+    state.selected = new Set(clones.map(c=>c.id));
+    render(); renderProps(); autosave();
+  }
+
+  function undo(){
+    const prev = state.history.pop();
+    if(!prev) return;
+    state.future.push(snapshot());
+    restore(prev);
+    autosave();
+  }
+
+  function redo(){
+    const next = state.future.pop();
+    if(!next) return;
+    state.history.push(snapshot());
+    restore(next);
+    autosave();
+  }
+
+  function exportJSON(){
+    try{
+      const data = { title: state.title, canvas: state.canvas, elements: state.elements };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (state.title || "templify") + ".json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+    }catch(e){ console.warn("Export failed", e); }
+  }
+
+  function applyGrid(){
+    if(!gridOverlay) return;
+    gridOverlay.style.display = state.grid ? "block" : "none";
+  }
+  function toggleGrid(){ state.grid = !state.grid; applyGrid(); }
+
+  function applyZoom(){
+    canvasEl.style.transformOrigin = "center";
+    canvasEl.style.transform = "scale(" + state.zoom.toFixed(3) + ")";
+  }
+  function zoomIn(){ state.zoom = Math.min(3, Math.round((state.zoom + 0.1)*10)/10); applyZoom(); }
+  function zoomOut(){ state.zoom = Math.max(0.2, Math.round((state.zoom - 0.1)*10)/10); applyZoom(); }
+
+  window.Editor = { state, addElement, deleteSelected, duplicateSelected, undo, redo, export: exportJSON, toggleGrid, zoomIn, zoomOut };
+
+  // Toolbar wiring
+  $("#backBtn")?.addEventListener("click", ()=>{ window.location.href="index.html"; });
+  $("#themeBtn")?.addEventListener("click", ()=>{
+    const cur = document.body.getAttribute("data-theme") || "dark";
+    const next = cur === "dark" ? "light" : "dark";
+    document.body.setAttribute("data-theme", next);
+    localStorage.setItem("templify_theme", next);
+  });
+  $("#addBtn")?.addEventListener("click", addElement);
+  $("#deleteBtn")?.addEventListener("click", deleteSelected);
+  $("#duplicateBtn")?.addEventListener("click", duplicateSelected);
+  $("#undoBtn")?.addEventListener("click", undo);
+  $("#redoBtn")?.addEventListener("click", redo);
+  $("#exportBtn")?.addEventListener("click", exportJSON);
+  $("#toggleGridBtn")?.addEventListener("click", toggleGrid);
+  $("#zoomInBtn")?.addEventListener("click", zoomIn);
+  $("#zoomOutBtn")?.addEventListener("click", zoomOut);
+  $("#selectBtn")?.addEventListener("click", ()=>{
+    $("#selectBtn")?.classList.add("primary");
+    setTimeout(()=>$("#selectBtn")?.classList.remove("primary"), 220);
+  });
+
+  // Shortcuts
+  window.addEventListener("keydown", (ev)=>{
+    const tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toLowerCase() : "";
+    const typing = tag === "input" || tag === "textarea" || ev.target?.isContentEditable;
+    const mod = ev.ctrlKey || ev.metaKey;
+
+    if(!typing){
+      if(ev.key === "Delete" || ev.key === "Backspace"){ deleteSelected(); ev.preventDefault(); return; }
+      if(mod && (ev.key === "d" || ev.key === "D")){ duplicateSelected(); ev.preventDefault(); return; }
+    }
+    if(mod && (ev.key === "z" || ev.key === "Z")){ (ev.shiftKey ? redo() : undo()); ev.preventDefault(); return; }
+    if(mod && (ev.key === "y" || ev.key === "Y")){ redo(); ev.preventDefault(); return; }
+    if(mod && (ev.key === "s" || ev.key === "S")){ exportJSON(); ev.preventDefault(); return; }
+    if(mod && (ev.key === "=" || ev.key === "+")){ zoomIn(); ev.preventDefault(); return; }
+    if(mod && ev.key === "-"){ zoomOut(); ev.preventDefault(); return; }
+    if(mod && (ev.key === "g" || ev.key === "G")){ toggleGrid(); ev.preventDefault(); return; }
+  });
+
+  // Init
+  applyGrid();
+  applyZoom();
+  loadDraft();
+  console.log("Nexora Editor Core V1 loaded ✔");
 })();
 </script>
 
