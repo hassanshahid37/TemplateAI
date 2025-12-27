@@ -222,6 +222,36 @@
   text-overflow:ellipsis;
 }
 
+
+/* === Header: match editor branding (icon + stacked text) === */
+.brand{display:flex;align-items:center;gap:12px}
+.brandText{display:flex;flex-direction:column;gap:2px;min-width:0}
+.brandText h1{margin:0;font-size:15px;font-weight:700;letter-spacing:.2px;line-height:1.1}
+.brandText p{margin:0}
+
+/* editor-like circular badge with the NEW official logo cropped to the N mark */
+.logo{
+  width:44px;
+  height:44px;
+  border-radius:14px;
+  background:
+    url("./nexora-brand.jpg") 12% 50% / 260% no-repeat,
+    rgba(10,14,30,.92);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 26px rgba(0,0,0,.45);
+  flex-shrink:0;
+}
+
+/* stacked lines like editor */
+.brandTag{color:var(--muted);font-size:12px;line-height:1.2}
+.brandSub{color:var(--muted);font-size:12px;line-height:1.2;opacity:.95}
+
+/* keep header height stable on small screens */
+@media (max-width:520px){
+  .logo{width:40px;height:40px;border-radius:12px}
+  .brandText h1{font-size:14px}
+}
+
 </style>
     
 </head>
@@ -229,13 +259,16 @@
 <body data-theme="dark">
   <div class="wrap">
     <header>
-      <div class="brand"><img src="/assets/nexora-logo.svg" alt="Nexora" class="logoImg"/>
+      
+      <div class="brand">
         <div class="logo" aria-hidden="true"></div>
-        <div>
+        <div class="brandText">
           <h1>Nexora</h1>
-          <p>Dark Premium AI Template Generator + Ultimate Editor v1</p>
+          <p class="brandTag">AI Creative Director</p>
+          <p class="brandSub">Dark Premium AI Template Generator + Ultimate Editor v1</p>
         </div>
       </div>
+    
 
       <div class="actions">
         <span class="tag">No auth • No subscriptions • Netlify-ready</span>
