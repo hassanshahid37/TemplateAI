@@ -3,8 +3,8 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8" ></svg>
+  <meta name="viewport" content="width=device-width,initial-scale=1" ></svg>
   <title>Nexora<br><small style='opacity:.7'>AI Creative Director</small> – Nexora – Dark Premium AI Template Generator</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -252,6 +252,13 @@
   .brandText h1{font-size:14px}
 }
 
+
+.logoSvg{
+  width:44px;
+  height:44px;
+  margin-right:12px;
+}
+
 </style>
     
 </head>
@@ -261,6 +268,17 @@
     <header>
       
       <div class="brand">
+<svg class="logoSvg" viewBox="0 0 100 100" aria-label="Nexora logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff5aa5"/>
+      <stop offset="50%" stop-color="#7a5cff"/>
+      <stop offset="100%" stop-color="#00d4ff"/>
+    </linearGradient>
+  </defs>
+  <path d="M20 80V20l60 60V20" fill="none" stroke="url(#g)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
         <div class="logo" aria-hidden="true"></div>
         <div class="brandText">
           <h1>Nexora</h1>
@@ -320,7 +338,7 @@
         <div class="row">
           <div class="field">
             <label>Count (max 200)</label>
-            <input id="count" type="number" min="1" max="200" value="24" />
+            <input id="count" type="number" min="1" max="200" value="24" ></svg>
           </div>
           <div class="field">
             <label>Style</label>
@@ -341,7 +359,7 @@
 
         <div class="field">
           <label>Notes</label>
-          <input id="notes" placeholder="(optional) brand name, colors, etc." />
+          <input id="notes" placeholder="(optional) brand name, colors, etc." ></svg>
         </div>
 
         <div class="foot">
@@ -937,7 +955,7 @@ function renderTemplatesFromList(list){
     return String(s||"")
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
+      .replace(></svg>/g,"&gt;")
       .replace(/"/g,"&quot;")
       .replace(/'/g,"&#39;");
   }
