@@ -289,6 +289,8 @@
       box-shadow: 0 22px 70px rgba(0,0,0,.45);
       position:relative;
       transform-origin: center;
+
+  overflow: hidden !important;
 }
     [data-theme="light"] .canvas{
       background:
@@ -948,8 +950,19 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     if(!e) return;
     const dx = (ev.clientX - drag.sx) / state.zoom;
     const dy = (ev.clientY - drag.sy) / state.zoom;
-    e.x = Math.round(drag.ox + dx);
-    e.y = Math.round(drag.oy + dy);
+
+    // Clamp within canvas bounds
+    const cw = canvasEl.clientWidth;
+    const ch = canvasEl.clientHeight;
+
+    let nx = Math.round(drag.ox + dx);
+    let ny = Math.round(drag.oy + dy);
+
+    nx = Math.max(0, Math.min(nx, cw - e.w));
+    ny = Math.max(0, Math.min(ny, ch - e.h));
+
+    e.x = nx;
+    e.y = ny;
     render();
   });
 
