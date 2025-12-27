@@ -23,8 +23,8 @@
       --radius:18px;
 
       --topH:58px;
-      --leftW:300px;
-      --rightW:320px;
+      --leftW: 220px;
+      --rightW: 240px;
     }
     [data-theme="light"]{
       --bg:#f5f7ff;
@@ -351,7 +351,7 @@
     @media (max-width: 1120px){
       .kbd{display:none;}
 
-      :root{ --leftW: 270px; --rightW: 290px; }
+      :root{ --leftW: 220px; --rightW: 240px; }
       .canvas{width: 900px;}
     }
     @media (max-width: 980px){
@@ -361,7 +361,58 @@
       .canvas{width: min(920px, 100%); height: 560px;}
       .tools{min-width: 1px}
     }
-  </style>
+  
+    /* === Canva-style layout clone (non-destructive) === */
+    .work.canvaWork{
+      display:grid;
+      grid-template-columns: 72px 260px minmax(0,1fr);
+      height:100%;
+      overflow:hidden;
+      gap:0;
+    }
+    .rail{
+      border-right:1px solid var(--stroke);
+      background:var(--panel);
+      backdrop-filter: blur(16px);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      padding:10px 8px;
+      gap:10px;
+    }
+    .railBtn{
+      width:44px;height:44px;
+      border-radius:14px;
+      border:1px solid var(--stroke);
+      background:var(--panel2);
+      color:var(--text);
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      transition:.15s ease;
+      user-select:none;
+    }
+    .railBtn:hover{transform:translateY(-1px);border-color:rgba(11,95,255,.35)}
+    .railBtn.active{
+      background:linear-gradient(135deg, rgba(11,95,255,.95), rgba(136,71,255,.85));
+      border-color:rgba(255,255,255,.14);
+      box-shadow:0 12px 30px rgba(11,95,255,.16);
+    }
+    .sidePanel{
+      border-right:1px solid var(--stroke);
+      background:var(--panel);
+      backdrop-filter: blur(16px);
+      overflow:hidden;
+      min-width:260px;
+    }
+    /* Hide old splitters/left panel styling if any leftover rules expect them */
+    .splitter,.panel.left{display:none !important;}
+    /* Stage gets all remaining space */
+    .work.canvaWork .stage{padding:0; overflow:hidden;}
+
+</style>
 
 
 
@@ -432,156 +483,56 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
       </div>
     </div>
 
-    <div class="work">
-      <!-- LEFT PANEL -->
-      <aside class="panel left" id="leftPanel">
-        <div class="panelHeader">
-          <b>Library</b>
-          <div class="seg" id="leftTabs">
-            <div class="chip active" data-tab="templates">Templates</div>
-            <div class="chip" data-tab="layers">Layers</div>
-            <div class="chip" data-tab="assets">Assets</div>
-          </div>
-        </div>
-        <div class="panelBody">
-          <input class="search" id="leftSearch" placeholder="Search…" />
-          <div class="list" id="leftList"></div>
-        </div>
-      </aside>
+    <div class="work canvaWork">
+  <!-- LEFT ICON RAIL (Canva-style) -->
+  <aside class="rail" id="rail">
+    <button class="railBtn active" data-mode="design" title="Design / Templates">🎨</button>
+    <button class="railBtn" data-mode="elements" title="Elements">⬚</button>
+    <button class="railBtn" data-mode="text" title="Text">T</button>
+    <button class="railBtn" data-mode="uploads" title="Uploads">⬆</button>
+    <button class="railBtn" data-mode="projects" title="Projects">▦</button>
+  </aside>
 
-      <div class="splitter" id="splitLeft" title="Drag to resize"></div>
-
-      <!-- CENTER STAGE -->
-      <main class="stage" id="stage">
-        <div class="canvasWrap">
-          <div class="canvas" id="canvas">
-            <div class="gridOverlay" id="gridOverlay"></div>
-          </div>
-        </div>
-      </main>
-
-      <div class="splitter" id="splitRight" title="Drag to resize"></div>
-
-      <!-- RIGHT PANEL -->
-      <aside class="panel right" id="rightPanel">
-        <div class="panelHeader">
-          <b>Properties</b>
-          <div class="seg" id="rightTabs">
-            <div class="chip active" data-tab="props">Selected</div>
-            <div class="chip" data-tab="doc">Document</div>
-            <div class="chip" data-tab="smart">Smart</div>
-          </div>
-        </div>
-        <div class="panelBody">
-          <div class="pane" data-pane="props">
-            <div class="propGrid">
-            <div class="field">
-              <label>Element</label>
-              <select id="propType">
-                <option value="card">Card</option>
-              </select>
-            </div>
-
-            <div class="row2">
-              <div class="field">
-                <label>X</label>
-                <input id="propX" type="number" />
-              </div>
-              <div class="field">
-                <label>Y</label>
-                <input id="propY" type="number" />
-              </div>
-            </div>
-
-            <div class="row2">
-              <div class="field">
-                <label>W</label>
-                <input id="propW" type="number" />
-              </div>
-              <div class="field">
-                <label>H</label>
-                <input id="propH" type="number" />
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Title</label>
-              <input id="propTitle" placeholder="Heading…" />
-            </div>
-
-            <div class="field">
-              <label>Subtitle</label>
-              <input id="propSub" placeholder="Supporting text…" />
-            </div>
-
-            <div class="miniHelp" id="helpBox">
-              Click an element to select. Drag to move. Use the toolbar for duplicate, delete, undo/redo, and export.
-            </div>
-          </div>
-          </div>
-
-          <div class="pane hidden" data-pane="doc">
-            <div class="propGrid">
-              <div class="field">
-                <label>Canvas size</label>
-                <div class="row2">
-                  <input id="docW" type="number" min="200" value="980" />
-                  <input id="docH" type="number" min="200" value="620" />
-                </div>
-              </div>
-
-              <div class="field">
-                <label>Background</label>
-                <input id="docBg" placeholder="e.g. #0b1020 or linear-gradient(...)" />
-              </div>
-
-              <div class="miniHelp">
-                Document settings affect the whole canvas. (Phase G: editor intelligence)
-              </div>
-
-              <div class="actionsRow">
-                <button class="btn tiny" id="applyDocBtn" type="button">Apply Document</button>
-                <button class="btn tiny" id="resetDocBtn" type="button">Reset</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="pane hidden" data-pane="smart">
-            <div class="propGrid">
-              <div class="field">
-                <label>Use your prompt</label>
-                <div class="miniHelp">
-                  Uses the prompt from the generator to auto-fill Headline / Subtitle / CTA.
-                </div>
-                <button class="btn tiny primary" id="smartApplyPrompt" type="button">Apply Prompt to Design</button>
-              </div>
-
-              <div class="field">
-                <label>Layout helpers</label>
-                <div class="actionsRow">
-                  <button class="btn tiny" id="smartTidy" type="button">Tidy</button>
-                  <button class="btn tiny" id="smartCenter" type="button">Center</button>
-                  <button class="btn tiny" id="smartDistribute" type="button">Distribute</button>
-                </div>
-              </div>
-
-              <div class="field">
-                <label>Typography</label>
-                <div class="actionsRow">
-                  <button class="btn tiny" id="smartUpcase" type="button">UPPERCASE</button>
-                  <button class="btn tiny" id="smartShorten" type="button">Shorten</button>
-                </div>
-              </div>
-
-              <div class="miniHelp">
-                Tip: Select multiple elements (Shift+Click) then use these actions.
-              </div>
-            </div>
-          </div>
-
-      </aside>
+  <!-- LEFT SIDEBAR (single panel; switches modes incl. Properties) -->
+  <aside class="sidePanel" id="sidePanel">
+    <div class="panelHeader" id="sideHeader">
+      <b id="sideTitle">Design</b>
+      <div class="seg" id="sideTabs">
+        <div class="chip active" data-tab="templates">Templates</div>
+        <div class="chip" data-tab="layers">Layers</div>
+        <div class="chip" data-tab="assets">Assets</div>
+      </div>
     </div>
-  </div>
+    <div class="panelBody" id="sideBody">
+      <input class="search" id="leftSearch" placeholder="Search…" />
+      <div class="list" id="leftList"></div>
+    </div>
+  </aside>
+
+  <!-- CENTER STAGE -->
+  <main class="stage" id="stage">
+    <div class="canvasWrap">
+      <div class="canvas" id="canvas">
+        <div class="gridOverlay" id="gridOverlay"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Hidden original right panel kept for logic + DOM moving -->
+  <aside class="panel right hidden" id="rightPanel">
+    <div class="panelHeader">
+      <b>Properties</b>
+      <div class="seg" id="rightTabs">
+        <div class="chip active" data-tab="props">Selected</div>
+        <div class="chip" data-tab="doc">Document</div>
+        <div class="chip" data-tab="smart">Smart</div>
+      </div>
+    </div>
+    <div class="panelBody" id="rightPanelBody">
+      <!-- (Content will be injected by existing editor JS below in the file) -->
+    </div>
+  </aside>
+</div>
 
 <script>
 (() => {
@@ -1665,5 +1616,120 @@ function escapeHtml(str){
 })();
 </script>
 
+<script>
+/* === Canva clone: left sidebar modes + selection->properties === */
+(function(){
+  // Rail mode switching (visual only; keeps existing leftList population)
+  const rail = document.getElementById('rail');
+  const sideTitle = document.getElementById('sideTitle');
+  const sideTabs = document.getElementById('sideTabs');
+  const sideBody = document.getElementById('sideBody');
+  const leftSearch = document.getElementById('leftSearch');
+  const leftList = document.getElementById('leftList');
+
+  // Keep references to original properties panel DOM (already built by existing code later)
+  const rightPanel = document.getElementById('rightPanel');
+
+  function setRailActive(mode){
+    rail?.querySelectorAll('.railBtn')?.forEach(b=>{
+      b.classList.toggle('active', b.dataset.mode===mode);
+    });
+  }
+
+  function showDesignMode(){
+    setRailActive('design');
+    sideTitle.textContent = 'Design';
+    sideTabs.classList.remove('hidden');
+    // Ensure search + list visible
+    if(leftSearch) leftSearch.classList.remove('hidden');
+    if(leftList) leftList.classList.remove('hidden');
+    // If we previously moved property UI into sidebar, move it back to hidden right panel
+    const propsRoot = document.getElementById('propsRoot');
+    if(propsRoot && rightPanel){
+      // return to rightPanelBody if present
+      const host = document.getElementById('rightPanelBody') || rightPanel.querySelector('.panelBody');
+      if(host && !host.contains(propsRoot)) host.appendChild(propsRoot);
+    }
+  }
+
+  function showPropertiesMode(){
+    setRailActive('design'); // Canva keeps "Design" highlighted; we keep rail stable
+    sideTitle.textContent = 'Position'; // Canva shows contextual label; "Position" is common
+    sideTabs.classList.add('hidden');
+    if(leftSearch) leftSearch.classList.add('hidden');
+    if(leftList) leftList.classList.add('hidden');
+
+    // Move properties UI into sidebar body (no duplicates)
+    const host = sideBody;
+    if(!host) return;
+    // Find the existing properties UI (created by your editor code). We'll wrap it once as #propsRoot.
+    let propsRoot = document.getElementById('propsRoot');
+    if(!propsRoot){
+      // Try common containers in current editor
+      propsRoot =
+        document.querySelector('#rightPanel .pane')?.parentElement ||
+        document.querySelector('#rightPanel .propGrid')?.closest('.pane') ||
+        document.querySelector('#rightPanel .panelBody');
+      if(propsRoot){
+        // Ensure stable id by wrapping children
+        const wrapper = document.createElement('div');
+        wrapper.id = 'propsRoot';
+        // move all children of panelBody into wrapper
+        const body = document.getElementById('rightPanelBody') || document.querySelector('#rightPanel .panelBody');
+        if(body){
+          while(body.firstChild) wrapper.appendChild(body.firstChild);
+          body.appendChild(wrapper);
+          propsRoot = wrapper;
+        }else{
+          propsRoot.id = 'propsRoot';
+        }
+      }
+    }
+    if(propsRoot && !host.contains(propsRoot)){
+      host.appendChild(propsRoot);
+    }
+  }
+
+  // Public-ish hooks for existing editor logic (non-breaking)
+  window.__NEXORA_CANVA_CLONE__ = { showDesignMode, showPropertiesMode };
+
+  // Click handling for rail
+  rail?.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.railBtn');
+    if(!btn) return;
+    // For now only 'design' is functional; others are placeholders but keep Canva feel
+    showDesignMode();
+  });
+
+  // Auto-switch to properties when selection changes:
+  // Existing code often updates "selectedIds" or calls updateUI/renderAll.
+  // We'll monkeypatch updateUI if present.
+  const prevUpdateUI = window.updateUI;
+  if(typeof prevUpdateUI === 'function'){
+    window.updateUI = function(){
+      const r = prevUpdateUI.apply(this, arguments);
+      try{
+        // If any element has .selected class, show properties; else show design.
+        const hasSel = !!document.querySelector('#canvas .selected');
+        if(hasSel) showPropertiesMode(); else showDesignMode();
+      }catch{}
+      return r;
+    }
+  } else {
+    // Fallback: observe selection class changes
+    const canvas = document.getElementById('canvas');
+    if(canvas){
+      const mo = new MutationObserver(()=>{
+        const hasSel = !!canvas.querySelector('.selected');
+        if(hasSel) showPropertiesMode(); else showDesignMode();
+      });
+      mo.observe(canvas, { subtree:true, attributes:true, attributeFilter:['class'] });
+    }
+  }
+
+  // Start in design mode
+  showDesignMode();
+})();
+</script>
 </body>
 </html>
