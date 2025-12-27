@@ -482,6 +482,7 @@
 
         
         <button class="btn tiny primary" id="exportBtn" type="button">⬇ Export</button>
+<button class="btn tiny" id="importBtn" type="button">⬆ Import</button>
       </div>
 
       <div class="righttools">
@@ -1082,6 +1083,65 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   applyZoom();
   loadDraft();
   console.log("Nexora Editor Core V1 loaded ✔");
+})();
+</script>
+
+
+<script>
+/* === IMPORT IMAGE (LOCKED FILE SAFE ADDITION) === */
+(function(){
+  if(window.__IMPORT_IMAGE_V1__) return;
+  window.__IMPORT_IMAGE_V1__ = true;
+
+  const btn = document.getElementById("importBtn");
+  if(!btn || !window.Editor) return;
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.style.display = "none";
+  document.body.appendChild(input);
+
+  btn.addEventListener("click", ()=> input.click());
+
+  input.addEventListener("change", ()=>{
+    const file = input.files && input.files[0];
+    if(!file) return;
+
+    const url = URL.createObjectURL(file);
+
+    const id = crypto.randomUUID ? crypto.randomUUID() : "img_"+Date.now();
+
+    Editor.state.elements.push({
+      id,
+      type: "image",
+      x: 160,
+      y: 160,
+      w: 320,
+      h: 220,
+      title: "",
+      subtitle: "",
+      bg: `url(${url}) center/cover no-repeat`,
+      color: "transparent",
+      radius: 14,
+      opacity: 1,
+      fontSize: 0,
+      weight: 0
+    });
+
+    Editor.state.selected.clear();
+    Editor.state.selected.add(id);
+
+    Editor.state.history.push(JSON.parse(JSON.stringify(Editor.state)));
+    Editor.state.future.length = 0;
+
+    Editor.state.zoom = Editor.state.zoom; // no-op, preserve state
+    document.getElementById("canvas").style.transform = document.getElementById("canvas").style.transform;
+
+    document.getElementById("canvas").dispatchEvent(new Event("refresh"));
+
+    if(typeof window.updateUI === "function") updateUI();
+  });
 })();
 </script>
 
