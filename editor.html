@@ -1522,7 +1522,7 @@ function escapeHtml(str){
   }
 
   // Left tabs
-  $("#leftTabs")?.addEventListener("click", (e)=>{
+  $("#leftTabs").addEventListener("click", (e)=>{
     const chip = e.target.closest(".chip");
     if(!chip) return;
     $$("#leftTabs .chip").forEach(c => c.classList.remove("active"));
@@ -1549,8 +1549,8 @@ function escapeHtml(str){
   $("#leftSearch").addEventListener("input", refreshLeft);
 
   // Wire splitters
-  { const _sl = $("#splitLeft"); if(_sl) wireSplitter(_sl, "left"); }
-  { const _sr = $("#splitRight"); if(_sr) wireSplitter(_sr, "right"); }
+  wireSplitter($("#splitLeft"), "left");
+  wireSplitter($("#splitRight"), "right");
 
   // Boot
   loadCanvasSize();
@@ -1857,6 +1857,52 @@ function escapeHtml(str){
     if(label.includes('text')){ call('addTextMode'); return; }
     if(label.includes('upload')){ call('showUploads'); return; }
   }, true);
+})();
+</script>
+
+
+<script>
+/* === SAFE DIRECT-OPEN BOOTSTRAP === */
+(function(){
+  // If editor state already exists (normal flow), do nothing
+  if (window.__EDITOR_BOOTSTRAPPED__) return;
+
+  // Detect missing core state
+  const needsBootstrap = (
+    typeof window.editorState === "undefined" ||
+    typeof window.currentDoc === "undefined"
+  );
+
+  if (!needsBootstrap) return;
+
+  // Minimal compatible state (matches existing expectations)
+  window.editorState = window.editorState || {
+    mode: "design",
+    zoom: 1,
+    selected: null
+  };
+
+  window.currentDoc = window.currentDoc || {
+    pages: [],
+    activePage: 0
+  };
+
+  // Flags used by existing logic
+  window.autoFitZoom = false;
+  window.zoom = window.editorState.zoom;
+
+  // Call existing init hooks if present
+  if (typeof window.initEditor === "function") {
+    try { window.initEditor(); } catch(e){}
+  }
+  if (typeof window.renderUI === "function") {
+    try { window.renderUI(); } catch(e){}
+  }
+  if (typeof window.showTemplates === "function") {
+    try { window.showTemplates(); } catch(e){}
+  }
+
+  window.__EDITOR_BOOTSTRAPPED__ = true;
 })();
 </script>
 
