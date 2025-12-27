@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Templify – Ultimate Editor v1</title>
+  <title>Nexora – AI Creative Director – Ultimate Editor v1</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
@@ -77,6 +77,25 @@
       box-shadow:0 10px 26px rgba(11,95,255,.22);
       border:1px solid rgba(255,255,255,.16);
       flex:0 0 auto;
+    }
+
+    .logoImg{
+      width:34px;height:34px;border-radius:12px;
+      object-fit:cover;
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:0 10px 26px rgba(11,95,255,.22);
+      flex:0 0 auto;
+    }
+    [data-theme="light"] .logoImg{
+      border:1px solid rgba(10,20,60,.12);
+      box-shadow:0 10px 26px rgba(10,20,60,.14);
+    }
+    .brandTag{
+      display:block;
+      font-size:11px;
+      color:var(--muted);
+      margin-top:1px;
+      line-height:1.2;
     }
     .brand b{font-size:13px;letter-spacing:.2px}
     .brand span{display:block;font-size:11px;color:var(--muted);margin-top:1px}
@@ -258,11 +277,10 @@
   justify-content:center;
 }
     .canvas{
-      width: 980px;
-      height: 620px;
-      aspect-ratio: 980 / 620;
-      max-width: calc(100% - 24px);
-      max-height: calc(100% - 24px);
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
       border-radius: 18px;
       background:
         linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)),
@@ -272,7 +290,6 @@
       position:relative;
       transform-origin: center;
 }
-    }
     [data-theme="light"] .canvas{
       background:
         linear-gradient(180deg, rgba(10,20,60,.05), rgba(10,20,60,.02)),
@@ -417,22 +434,29 @@
 
 
 <style>
+<style>
 /* === NEW CANVAS SYSTEM (REPLACED) === */
+/* Make the canvas fill the available stage area (between bars) */
 .stage{
   display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
+  align-items:stretch !important;
+  justify-content:stretch !important;
   overflow:hidden !important;
 }
 .canvasWrap{
+  width:100% !important;
+  height:100% !important;
   display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  min-height:100% !important;
+  align-items:stretch !important;
+  justify-content:stretch !important;
+  padding:12px !important;
+  box-sizing:border-box !important;
 }
 #canvas{
-  width:880px !important;
-  height:620px !important;
+  width:100% !important;
+  height:100% !important;
+  max-width:100% !important;
+  max-height:100% !important;
   position:relative !important;
   transform:none !important;
 }
@@ -456,9 +480,10 @@
     <!-- TOP BAR (fixed alignment + visible) -->
     <div class="topbar">
       <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
+        <img class="logoImg" src="nexora-logo.jpeg" alt="Nexora" />
         <div>
-          <b>Templify Editor</b>
+          <b>Nexora</b>
+          <span class="brandTag">AI Creative Director</span>
           <span id="docTitle">Untitled</span>
         </div>
       </div>
