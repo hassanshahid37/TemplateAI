@@ -1179,267 +1179,268 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
       setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
     }catch(e){ console.warn("Export failed", e); }
   }
-  // === Canvas Export (V7) ===
-  // Renders current state.elements to a real <canvas> and downloads PNG/JPG.
-  async function exportImage(ev){
-    try{
-      // Stop any legacy handlers from firing (prevents JSON/notepad exports)
-      if(ev){
-        ev.preventDefault?.();
-        ev.stopPropagation?.();
-        ev.stopImmediatePropagation?.();
-      }
 
-      // Ask for scale + format (keeps your old "size options" idea)
-      const sizeRaw = (prompt("Export size? Type 1, 2, or 4 (default 2).", "2") || "").trim();
-      let scale = Number(sizeRaw || 2);
-      if(!Number.isFinite(scale) || ![1,2,4].includes(scale)) scale = 2;
+  // --- Nexora Export (image) ---
+  const EXPORT_PRESETS = [
+    { key:"instagram_post", label:"Instagram Post", w:1080, h:1080 },
+    { key:"youtube_thumbnail", label:"YouTube Thumbnail", w:1280, h:720 },
+    { key:"flyer_a4", label:"Flyer (A4)", w:2480, h:3508 },
+    { key:"business_card", label:"Business Card", w:1050, h:600 },
+    { key:"logo", label:"Logo", w:1000, h:1000 },
+    { key:"presentation_slide", label:"Presentation Slide", w:1920, h:1080 },
+    { key:"resume_letter", label:"Resume (Letter)", w:2550, h:3300 },
+    { key:"poster_a3", label:"Poster (A3)", w:3508, h:4961 },
+    { key:"story", label:"Story", w:1080, h:1920 },
+  ];
 
-      const fmtRaw = (prompt("Export format: PNG or JPG", "PNG") || "").trim().toLowerCase();
-      const fmt = (fmtRaw === "jpg" || fmtRaw === "jpeg") ? "jpg" : "png";
+  function ensureExportModal(){
+    let modal = document.getElementById("nexoraExportModal");
+    if(modal) return modal;
 
-      const canvasW = Math.max(1, Math.floor((state.canvas?.w || 1080) * scale));
-      const canvasH = Math.max(1, Math.floor((state.canvas?.h || 1080) * scale));
+    const overlay = document.createElement("div");
+    overlay.id = "nexoraExportModal";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);";
+    overlay.innerHTML = `
+      <div style="width:min(520px,92vw);background:#0f172a;color:#e5e7eb;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.55);padding:18px 16px;position:relative;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+          <div style="font-weight:700;font-size:18px;">Export</div>
+          <button id="nexoraExportClose" aria-label="Close" style="border:0;background:transparent;color:#cbd5e1;font-size:20px;line-height:1;cursor:pointer;">×</button>
+        </div>
 
-      const c = document.createElement("canvas");
-      c.width = canvasW;
-      c.height = canvasH;
-      const ctx = c.getContext("2d");
-      if(!ctx) throw new Error("Canvas context missing");
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <div style="font-size:12px;opacity:.85;margin-bottom:6px;">Purpose (size)</div>
+            <select id="nexoraExportPurpose" style="width:100%;background:#0b1220;color:#e5e7eb;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;outline:none;">
+            </select>
+          </div>
 
-      // High quality scaling
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.save();
-      ctx.scale(scale, scale);
+          <div>
+            <div style="font-size:12px;opacity:.85;margin-bottom:6px;">Format</div>
+            <label style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer;">
+              <input type="radio" name="nexoraExportFmt" value="png" checked>
+              <span>PNG (transparent)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer;">
+              <input type="radio" name="nexoraExportFmt" value="jpg">
+              <span>JPG (white bg)</span>
+            </label>
+          </div>
 
-      // Optional background for JPG (avoid transparency)
-      if(fmt === "jpg"){
-        const bg = findBackgroundColor();
-        ctx.fillStyle = bg || "#ffffff";
-        ctx.fillRect(0,0,(state.canvas?.w||1080),(state.canvas?.h||1080));
-      }
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;">
+            <button id="nexoraExportCancel" style="background:#111827;color:#e5e7eb;border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:10px 14px;cursor:pointer;">Cancel</button>
+            <button id="nexoraExportDownload" style="background:#2563eb;color:white;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600;">Download</button>
+          </div>
 
-      // Draw elements (bg first)
-      const els = Array.isArray(state.elements) ? state.elements.slice() : [];
-      els.sort((a,b)=> (a?.type==="bg"?-1:0) - (b?.type==="bg"?-1:0));
+          <div style="font-size:11px;opacity:.65;margin-top:2px;">
+            Tip: If your browser blocks downloads, allow pop-ups/downloads for this site.
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
 
-      // Preload images (blob/data URLs)
-      const imageCache = new Map();
-      for(const e of els){
-        if(String(e?.type).toLowerCase()==="image" && e?.src){
-          const img = await loadImageSafe(e.src);
-          if(img) imageCache.set(e.id, img);
-        }
-      }
-
-      for(const e of els){
-        drawElement(ctx, e, imageCache.get(e?.id));
-      }
-
-      ctx.restore();
-
-      // Export to blob + download
-      const mime = fmt === "jpg" ? "image/jpeg" : "image/png";
-      const quality = fmt === "jpg" ? 0.92 : undefined;
-
-      const blob = await new Promise((resolve)=> c.toBlob(resolve, mime, quality));
-      if(!blob) throw new Error("Export failed (blank blob)");
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = sanitizeFilename(state.title || "design") + "." + fmt;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 1500);
-    }catch(err){
-      console.warn("Image export failed", err);
-      alert("Export failed. Try again. If it keeps failing, tell me what you typed in the prompts.");
+    // populate presets
+    const sel = overlay.querySelector("#nexoraExportPurpose");
+    for(const p of EXPORT_PRESETS){
+      const opt = document.createElement("option");
+      opt.value = p.key;
+      opt.textContent = `${p.label} (${p.w}×${p.h})`;
+      sel.appendChild(opt);
     }
-  }
+    // default to current canvas aspect match if possible
+    const cw = (state && state.canvas && state.canvas.w) ? state.canvas.w : 1080;
+    const ch = (state && state.canvas && state.canvas.h) ? state.canvas.h : 1080;
+    const match = EXPORT_PRESETS.find(p => p.w===cw && p.h===ch);
+    if(match) sel.value = match.key;
 
-  function sanitizeFilename(name){
-    return String(name||"design").trim().replace(/[\\/:*?"<>|]+/g,"-").slice(0,80) || "design";
-  }
-
-  function findBackgroundColor(){
-    // If there's a bg element, use its bg/fill color for JPG background
-    try{
-      const els = Array.isArray(state.elements) ? state.elements : [];
-      const bgEl = els.find(e=>String(e?.type).toLowerCase()==="bg" && (e?.bg || e?.fill || e?.color));
-      const c = bgEl?.bg || bgEl?.fill || bgEl?.color;
-      return (typeof c==="string" && c.trim()) ? c.trim() : null;
-    }catch{return null;}
-  }
-
-  function loadImageSafe(src){
-    return new Promise((resolve)=>{
+    function close(){ overlay.style.display = "none"; }
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+    overlay.querySelector("#nexoraExportClose").addEventListener("click", close);
+    overlay.querySelector("#nexoraExportCancel").addEventListener("click", close);
+    overlay.querySelector("#nexoraExportDownload").addEventListener("click", async ()=>{
       try{
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = ()=> resolve(img);
-        img.onerror = ()=> resolve(null);
-        img.src = src;
-      }catch{ resolve(null); }
+        overlay.querySelector("#nexoraExportDownload").disabled = true;
+        await performNexoraExport();
+        close();
+      }catch(err){
+        console.warn("Export failed", err);
+        alert("Export failed");
+      }finally{
+        overlay.querySelector("#nexoraExportDownload").disabled = false;
+      }
     });
+
+    return overlay;
   }
 
-  function drawElement(ctx, e, img){
-    if(!e) return;
-    const type = String(e.type||"").toLowerCase();
-    const x = Number(e.x||0), y = Number(e.y||0), w = Number(e.w||0), h = Number(e.h||0);
-    const opacity = (e.opacity==null)?1:Number(e.opacity);
-    ctx.save();
-    ctx.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
-
-    if(type==="bg"){
-      const fill = e.bg || e.fill || e.color || null;
-      fillRect(ctx, 0,0,(state.canvas?.w||1080),(state.canvas?.h||1080), fill, 0);
-      ctx.restore(); 
-      return;
-    }
-
-    if(type==="image" && img){
-      const r = Number(e.radius||0);
-      roundedClip(ctx, x, y, w, h, r);
-      drawFittedImage(ctx, img, x, y, w, h, (e.fit||"cover"));
-      ctx.restore();
-      return;
-    }
-
-    // Shapes for cards/badges/buttons/text backgrounds
-    const bg = e.bg;
-    const stroke = e.stroke || null;
-    const r = Number(e.radius||0);
-    if(bg && bg !== "transparent"){
-      fillRect(ctx, x, y, w, h, bg, r);
-    }
-    if(stroke){
-      strokeRect(ctx, x, y, w, h, stroke, r);
-    }
-
-    // Text rendering
-    const title = (e.title==null) ? "" : String(e.title);
-    const subtitle = (e.subtitle==null) ? "" : String(e.subtitle);
-    const color = (typeof e.color === "string" && e.color.trim()) ? e.color.trim() : "rgba(255,255,255,0.92)";
-    const fontSize = Math.max(8, Number(e.fontSize||22));
-    const weight = Math.max(300, Number(e.weight||700));
-
-    const pad = 16;
-    let cursorY = y + pad + fontSize;
-    if(title && type!=="image"){
-      ctx.fillStyle = color;
-      ctx.font = `${weight} ${fontSize}px Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      cursorY = drawWrappedText(ctx, title, x+pad, y+pad, w-pad*2, fontSize*1.25);
-    }
-    if(subtitle && type!=="image"){
-      ctx.fillStyle = color;
-      ctx.globalAlpha = ctx.globalAlpha * 0.85;
-      const subSize = Math.max(10, Math.round(fontSize * 0.72));
-      ctx.font = `600 ${subSize}px Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      drawWrappedText(ctx, subtitle, x+pad, cursorY+6, w-pad*2, subSize*1.22);
-    }
-
-    ctx.restore();
+  function openExportPopup(){
+    const modal = ensureExportModal();
+    modal.style.display = "flex";
   }
 
-  function cssToFill(ctx, fill, x,y,w,h){
-    const f = String(fill||"").trim();
-    if(!f) return null;
-    if(f.startsWith("linear-gradient")){
-      // Very small parser: uses first 2 colors
-      const colors = f.match(/(rgba?\([^\)]+\)|#[0-9a-fA-F]{3,8})/g) || [];
-      const c1 = colors[0] || "#0b1020";
-      const c2 = colors[1] || c1;
-      const g = ctx.createLinearGradient(x,y,x+w,y+h);
-      g.addColorStop(0,c1); g.addColorStop(1,c2);
-      return g;
-    }
-    return f;
+  function getSelectedExportPreset(){
+    const modal = document.getElementById("nexoraExportModal");
+    const key = modal ? modal.querySelector("#nexoraExportPurpose").value : EXPORT_PRESETS[0].key;
+    return EXPORT_PRESETS.find(p=>p.key===key) || EXPORT_PRESETS[0];
   }
 
-  function fillRect(ctx, x,y,w,h, fill, r){
-    const f = cssToFill(ctx, fill, x,y,w,h);
-    if(!f) return;
-    if(r>0){
-      roundedPath(ctx, x,y,w,h,r);
-      ctx.fillStyle = f;
-      ctx.fill();
-    }else{
-      ctx.fillStyle = f;
-      ctx.fillRect(x,y,w,h);
-    }
+  function getSelectedExportFormat(){
+    const modal = document.getElementById("nexoraExportModal");
+    const fmt = modal ? (modal.querySelector('input[name="nexoraExportFmt"]:checked')?.value || "png") : "png";
+    return (fmt === "jpg") ? "jpg" : "png";
   }
 
-  function strokeRect(ctx, x,y,w,h, stroke, r){
-    const s = cssToFill(ctx, stroke, x,y,w,h);
-    if(!s) return;
-    ctx.strokeStyle = s;
-    ctx.lineWidth = 2;
-    if(r>0){
-      roundedPath(ctx, x,y,w,h,r);
-      ctx.stroke();
-    }else{
-      ctx.strokeRect(x,y,w,h);
-    }
-  }
-
-  function roundedPath(ctx, x,y,w,h,r){
-    r = Math.max(0, Math.min(r, Math.min(w,h)/2));
+  function roundRectPath(ctx, x, y, w, h, r){
+    const rr = Math.max(0, Math.min(r||0, Math.min(w,h)/2));
     ctx.beginPath();
-    ctx.moveTo(x+r, y);
-    ctx.arcTo(x+w, y, x+w, y+h, r);
-    ctx.arcTo(x+w, y+h, x, y+h, r);
-    ctx.arcTo(x, y+h, x, y, r);
-    ctx.arcTo(x, y, x+w, y, r);
+    ctx.moveTo(x+rr, y);
+    ctx.lineTo(x+w-rr, y);
+    ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
+    ctx.lineTo(x+w, y+h-rr);
+    ctx.quadraticCurveTo(x+w, y+h, x+w-rr, y+h);
+    ctx.lineTo(x+rr, y+h);
+    ctx.quadraticCurveTo(x, y+h, x, y+h-rr);
+    ctx.lineTo(x, y+rr);
+    ctx.quadraticCurveTo(x, y, x+rr, y);
     ctx.closePath();
   }
 
-  function roundedClip(ctx, x,y,w,h,r){
-    roundedPath(ctx,x,y,w,h,r);
-    ctx.clip();
-  }
-
-  function drawFittedImage(ctx, img, x,y,w,h, fit){
-    const mode = String(fit||"cover").toLowerCase();
-    const iw = img.naturalWidth || img.width || 1;
-    const ih = img.naturalHeight || img.height || 1;
-    if(mode==="contain"){
-      const s = Math.min(w/iw, h/ih);
-      const dw = iw*s, dh = ih*s;
-      const dx = x + (w-dw)/2;
-      const dy = y + (h-dh)/2;
+  function drawImageFit(ctx, img, dx, dy, dw, dh, fit){
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    if(!iw || !ih){
       ctx.drawImage(img, dx, dy, dw, dh);
       return;
     }
-    // cover default
-    const s = Math.max(w/iw, h/ih);
-    const dw = iw*s, dh = ih*s;
-    const dx = x + (w-dw)/2;
-    const dy = y + (h-dh)/2;
-    ctx.drawImage(img, dx, dy, dw, dh);
+    const s = (fit === "contain") ? Math.min(dw/iw, dh/ih) : Math.max(dw/iw, dh/ih);
+    const sw = iw * s;
+    const sh = ih * s;
+    const ox = dx + (dw - sw)/2;
+    const oy = dy + (dh - sh)/2;
+    ctx.drawImage(img, ox, oy, sw, sh);
   }
 
-  function drawWrappedText(ctx, text, x, y, maxW, lineH){
-    const words = String(text).replace(/\s+/g," ").trim().split(" ");
-    let line = "";
-    let cursorY = y;
-    for(let i=0;i<words.length;i++){
-      const test = line ? (line + " " + words[i]) : words[i];
-      const w = ctx.measureText(test).width;
-      if(w > maxW && line){
-        ctx.fillText(line, x, cursorY);
-        line = words[i];
-        cursorY += lineH;
-      }else{
-        line = test;
-      }
-    }
-    if(line) ctx.fillText(line, x, cursorY);
-    return cursorY;
+  async function loadImage(src){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      // blob/object URLs are same-origin; leave crossOrigin unset to avoid tainting
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>reject(new Error("Image failed to load"));
+      img.src = src;
+    });
   }
+
+  async function renderDesignToCanvas(targetW, targetH, fmt){
+    const out = document.createElement("canvas");
+    out.width = targetW;
+    out.height = targetH;
+    const ctx = out.getContext("2d");
+
+    // background
+    if(fmt === "jpg"){
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0,0,targetW,targetH);
+    }else{
+      ctx.clearRect(0,0,targetW,targetH);
+    }
+
+    const cw = state?.canvas?.w || 1080;
+    const ch = state?.canvas?.h || 1080;
+
+    // uniform scale + center (keeps aspect without cropping)
+    const scale = Math.min(targetW / cw, targetH / ch);
+    const offsetX = (targetW - cw*scale)/2;
+    const offsetY = (targetH - ch*scale)/2;
+
+    // draw elements in order
+    for(const el of (state?.elements || [])){
+      const x = offsetX + (el.x||0) * scale;
+      const y = offsetY + (el.y||0) * scale;
+      const w = (el.w||0) * scale;
+      const h = (el.h||0) * scale;
+      const opacity = (el.opacity==null) ? 1 : el.opacity;
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      if(el.type === "image" && el.src){
+        try{
+          const img = await loadImage(el.src);
+          const r = (el.radius||0) * scale;
+          if(r > 0){
+            roundRectPath(ctx, x, y, w, h, r);
+            ctx.clip();
+          }
+          drawImageFit(ctx, img, x, y, w, h, el.fit || "cover");
+        }catch(_e){
+          // ignore broken images
+        }
+      }else if(el.type === "text"){
+        const r = (el.radius||0) * scale;
+
+        // bg
+        if(el.bg && el.bg !== "transparent"){
+          roundRectPath(ctx, x, y, w, h, r);
+          ctx.fillStyle = el.bg;
+          ctx.fill();
+        }
+
+        // text
+        const pad = 12 * scale;
+        const title = (el.title || "").toString();
+        const subtitle = (el.subtitle || "").toString();
+        const fontSize = Math.max(8, (el.fontSize || 28) * scale);
+        const weight = el.weight || 600;
+
+        ctx.fillStyle = (el.color && el.color !== "transparent") ? el.color : "#111827";
+        ctx.textBaseline = "top";
+
+        // title
+        ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
+        const titleY = y + pad;
+        ctx.fillText(title, x + pad, titleY);
+
+        // subtitle
+        if(subtitle){
+          const subSize = Math.max(7, Math.round(fontSize * 0.6));
+          ctx.font = `400 ${subSize}px Arial, sans-serif`;
+          ctx.fillText(subtitle, x + pad, titleY + fontSize + (6*scale));
+        }
+      }
+
+      ctx.restore();
+    }
+
+    return out;
+  }
+
+  async function performNexoraExport(){
+    const preset = getSelectedExportPreset();
+    const fmt = getSelectedExportFormat();
+
+    const canvas = await renderDesignToCanvas(preset.w, preset.h, fmt);
+
+    const mime = (fmt === "jpg") ? "image/jpeg" : "image/png";
+    const ext = (fmt === "jpg") ? "jpg" : "png";
+    const title = (state?.title || "Untitled").toString().trim().replace(/[\/:*?"<>|]+/g, "_");
+    const filename = `${title}_${preset.label.replace(/\s+/g,"_")}.${ext}`;
+
+    await new Promise((resolve, reject)=>{
+      canvas.toBlob((blob)=>{
+        if(!blob){ reject(new Error("No blob")); return; }
+        const a = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 2000);
+        resolve();
+      }, mime, (fmt==="jpg") ? 0.92 : undefined);
+    });
+  }
+  // --- end Nexora Export ---
 
 
 
@@ -1502,7 +1503,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   $("#duplicateBtn")?.addEventListener("click", duplicateSelected);
   $("#undoBtn")?.addEventListener("click", undo);
   $("#redoBtn")?.addEventListener("click", redo);
-  $("#exportBtn")?.addEventListener("click", exportImage);
+  $("#exportBtn")?.addEventListener("click", (e)=>{ e?.preventDefault?.(); openExportPopup(); });
   // Import Image (instant render, browser-safe)
   (function(){
     if(window.__IMPORT_IMAGE_SPLIT_V2__) return;
