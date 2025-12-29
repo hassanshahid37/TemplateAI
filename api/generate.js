@@ -316,11 +316,9 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
 
 function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 
-  // === PHASE_6A2B_YT_HARD ===
+  // === PHASE_6A2C_YT_BUILDER ===
   const YT_ARCHETYPES = ["face-left","face-right","text-heavy","minimal"];
-  function pickYTArchetypeHard(i){
-    return YT_ARCHETYPES[i % YT_ARCHETYPES.length];
-  }
+  function pickYT(i){ return YT_ARCHETYPES[i % YT_ARCHETYPES.length]; }
 
   const words = splitWords(prompt);
   const base = prompt ? titleCase(prompt) : "New Collection";
@@ -342,6 +340,73 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 
   const templates = [];
   for (let i = 0; i < count; i++) {
+
+    const isYT = String(category).toLowerCase().includes("youtube");
+    if(isYT){
+      const ytType = pickYT(i);
+      const elements = [];
+
+      // Background
+      elements.push({
+        type: "bg",
+        role: "background",
+        x: 0, y: 0, w: canvas.w, h: canvas.h,
+        fill: palette.bg
+      });
+
+      // TEXT-ONLY archetypes
+      if(ytType === "text-heavy" || ytType === "minimal"){
+        elements.push({
+          type: "text",
+          role: "headline",
+          text: titleCase(prompt).split(" ").slice(0,6).join(" "),
+          x: margin,
+          y: canvas.h * 0.35,
+          w: canvas.w - margin*2,
+          h: 120,
+          size: ytType === "minimal" ? 96 : 72,
+          weight: 900
+        });
+      }
+
+      // IMAGE archetypes
+      if(ytType === "face-left" || ytType === "face-right"){
+        const imgW = canvas.w * 0.45;
+        const imgX = ytType === "face-left" ? margin : canvas.w - imgW - margin;
+
+        elements.push({
+          type: "image",
+          role: "image",
+          x: imgX,
+          y: margin,
+          w: imgW,
+          h: canvas.h - margin*2
+        });
+
+        elements.push({
+          type: "text",
+          role: "headline",
+          text: titleCase(prompt).split(" ").slice(0,6).join(" "),
+          x: ytType === "face-left" ? canvas.w*0.55 : margin,
+          y: canvas.h*0.35,
+          w: canvas.w*0.4,
+          h: 120,
+          size: 72,
+          weight: 900
+        });
+      }
+
+      templates.push({
+        title: titleCase(prompt),
+        category,
+        style,
+        archetype: ytType,
+        elements
+      });
+
+      continue;
+    }
+
     const a = archetypes[(start + i) % archetypes.length];
 
     // deterministic copy (varies, but stays premium)
