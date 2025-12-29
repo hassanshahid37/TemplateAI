@@ -316,9 +316,9 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
 
 function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 
-  // === PHASE_6A2_YT_ARCHETYPES ===
+  // === PHASE_6A2B_YT_HARD ===
   const YT_ARCHETYPES = ["face-left","face-right","text-heavy","minimal"];
-  function pickYTArchetype(i){
+  function pickYTArchetypeHard(i){
     return YT_ARCHETYPES[i % YT_ARCHETYPES.length];
   }
 
