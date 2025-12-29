@@ -288,63 +288,6 @@
     if(cat.includes("youtube")){
       w.youtubeBold += 18; w.posterHero -= 6; w.productPoster -= 6;
     }
-
-  /* ===============================
-     Layout Families v1 (Instagram)
-     =============================== */
-  const IG_LAYOUT_FAMILIES_V1 = [
-    { id:"text-first",   label:"Text First",   layouts:["minimalQuote","bigNumber","posterHero"] },
-    { id:"image-led",    label:"Image Led",    layouts:["photoCard","productPoster","posterHero"] },
-    { id:"split",        label:"Split",        layouts:["splitHero","eventFlyer"] },
-    { id:"cards",        label:"Cards",        layouts:["featureGrid","badgePromo"] },
-    { id:"minimal-grid", label:"Minimal Grid", layouts:["posterHero","minimalQuote"] }
-  ];
-
-  const __LAYOUT_NAME_BY_ID = {
-    posterHero:"Poster Hero",
-    productPoster:"Product Poster",
-    eventFlyer:"Event Flyer",
-    splitHero:"Split Hero",
-    badgePromo:"Badge Promo",
-    featureGrid:"Feature Grid",
-    photoCard:"Photo Card",
-    minimalQuote:"Minimal Quote",
-    bigNumber:"Big Number",
-    youtubeBold:"YouTube Bold"
-  };
-
-  function pickLayoutFamilyV1(seed, intent, category){
-    if(String(category||"").toLowerCase() !== "instagram post") return null;
-
-    const t = (intent?.type || "generic");
-    const s = (seed ^ hash("ig|family|"+t)) >>> 0;
-
-    const weights = {
-      generic:      { "text-first":18, "image-led":24, "split":18, "cards":22, "minimal-grid":18 },
-      promo:        { "text-first":10, "image-led":34, "split":14, "cards":30, "minimal-grid":12 },
-      quote:        { "text-first":48, "image-led":10, "split":10, "cards":12, "minimal-grid":20 },
-      hiring:       { "text-first":16, "image-led":14, "split":28, "cards":30, "minimal-grid":12 },
-      announcement: { "text-first":22, "image-led":18, "split":26, "cards":18, "minimal-grid":16 }
-    };
-
-    const w = weights[t] || weights.generic;
-    const wlist = IG_LAYOUT_FAMILIES_V1.map(f=>({ w: w[f.id] ?? 10, v: f }));
-    return weightedPick(wlist, s);
-  }
-
-  function pickLayoutFromFamily(seed, family){
-    if(!family) return null;
-    const layouts = family.layouts || [];
-    if(!layouts.length) return null;
-    const s = (seed ^ hash("ig|variant|"+family.id)) >>> 0;
-    return layouts[s % layouts.length];
-  }
-
-  function archetypeForFamily(seed, intent, family){
-    const layout = pickLayoutFromFamily(seed, family);
-    if(!layout) return null;
-    return { name: __LAYOUT_NAME_BY_ID[layout] || family.label || family.id, layout };
-  }
     if(cat.includes("logo")){
       w.minimalQuote += 10; w.posterHero -= 10; w.productPoster -= 8;
     }
@@ -481,62 +424,100 @@
   }
 
   
-/* ===============================
-   DESIGN TOKENS v1 (Canva-grade)
-   =============================== */
-const DESIGN_TOKENS_V1 = {
-  radius: { sm: 10, md: 16, lg: 24, xl: 44 },
-  spacing:{ xs: 8, sm: 12, md: 20, lg: 32, xl: 48 },
-  shadow: { soft: { x:0, y:14, blur:38, color:"rgba(0,0,0,0.22)" } }
-};
+  // ---- Layout Families v1 (Instagram) ----
+  // Keeps generation diverse (up to 200) while staying within proven Canva-grade archetypes.
+  function nxPickInstagramFamilyV1(seed, idx, intent){
+    const t = intent?.type || "generic";
+    const families = [
+      { family:"Hero",      name:"Hero Poster",      layouts:["posterHero","productPoster"] },
+      { family:"Split",     name:"Split Hero",       layouts:["splitHero"] },
+      { family:"Grid",      name:"Feature Grid",     layouts:["featureGrid"] },
+      { family:"Badge",     name:"Badge Promo",      layouts:["badgePromo","bigNumber"] },
+      { family:"Quote",     name:"Minimal Quote",    layouts:["minimalQuote"] },
+      { family:"Photo",     name:"Photo Card",       layouts:["photoCard","eventFlyer"] }
+    ];
 
-function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
-function scaleByH(h, v){ return Math.round(h * v); }
+    // Stronger bias by intent (still uses same safe archetypes)
+    const bias = (fam)=>{
+      if(t==="promo" && (fam.family==="Badge" || fam.family==="Hero")) return 1.35;
+      if(t==="hiring" && (fam.family==="Hero" || fam.family==="Grid")) return 1.25;
+      if(t==="announcement" && (fam.family==="Hero" || fam.family==="Photo")) return 1.15;
+      if(t==="quote" && fam.family==="Quote") return 1.6;
+      return 1.0;
+    };
 
-function polishElementsV1(elements, layout, spec){
-  const { w,h,pal } = spec;
-  const radLG = DESIGN_TOKENS_V1.radius.lg;
-  const radXL = DESIGN_TOKENS_V1.radius.xl;
+    const s = (seed ^ hash("igfam|"+t+"|"+idx)) >>> 0;
+    // Deterministic “shuffled cycle”: stable but varied across idx.
+    const order = families
+      .map((f,i)=>({ f, score:(hash(f.family+"|"+s)>>>0) * bias(f) }))
+      .sort((a,b)=>b.score-a.score)
+      .map(x=>x.f);
 
-  for(const el of elements){
-    if(typeof el.r === "number" && el.r > 0){
-      el.r = clamp(el.r, radLG, radXL);
-    }
-    if(el.type === "shape" && el.stroke && typeof el.opacity === "number" && el.opacity >= 0.85){
-      el.shadow = el.shadow || DESIGN_TOKENS_V1.shadow.soft;
-    }
-    if(el.type === "text" && typeof el.size === "number"){
-      if(el.size >= scaleByH(h, 0.06)){
-        if(typeof el.letter !== "number") el.letter = -0.8;
-        el.weight = el.weight || 900;
-      } else if(el.size <= scaleByH(h, 0.035)){
-        el.weight = el.weight || 600;
+    const fam = order[idx % order.length] || families[0];
+    const layouts = fam.layouts || ["posterHero"];
+    const layout = pick(layouts, s + idx*997);
+    return { family:fam.family, name:fam.name, layout };
+  }
+
+  // ---- Archetype Polish v1 ----
+  // Subtle, safe tweaks to make compositions feel more “Canva-grade” without changing the contract.
+  function nxApplyArchetypePolishV1(elements, spec, layout){
+    const { w,h,pal } = spec || {};
+    const isDark = !!pal && (String(pal.bg||"").startsWith("#0") || String(pal.bg||"").startsWith("#1"));
+    const roundBase = Math.round(Math.min(w||1080,h||1080) * 0.035); // ~38 on 1080
+    const roundHi   = Math.round(Math.min(w||1080,h||1080) * 0.055); // ~59 on 1080
+
+    for(const el of elements){
+      if(!el || typeof el!=="object") continue;
+
+      // Unify corner radius across “card-like” observations.
+      if(el.type==="card" || el.type==="photo" || el.type==="shape" || el.type==="pill" || el.type==="chip" || el.type==="badge"){
+        if(typeof el.r==="number"){
+          // Keep original intent but smooth extremes.
+          el.r = clamp(el.r, roundBase, roundHi);
+        }
+      }
+
+      // Typography polish: increase readability & spacing consistency.
+      if(el.type==="text"){
+        if(typeof el.size==="number"){
+          // Keep within sane bounds.
+          el.size = clamp(el.size, Math.round((h||1080)*0.020), Math.round((h||1080)*0.090));
+        }
+        if(typeof el.letter==="number"){
+          el.letter = clamp(el.letter, -1.2, 0.6);
+        }
+        if(typeof el.weight==="number"){
+          // Normalize 800/900 heaviness depending on style.
+          if(!isDark && el.weight>800) el.weight = 800;
+        }
+      }
+
+      // Light stroke consistency for glass/dark styles (safe: only touches if stroke already present).
+      if(typeof el.stroke==="string" && el.stroke.includes("rgba")){
+        // Slightly reduce harshness.
+        el.stroke = el.stroke.replace(/rgba\(([^)]+)\)/, (m,inner)=>{
+          const parts = inner.split(",").map(x=>x.trim());
+          if(parts.length!==4) return m;
+          const a = parseFloat(parts[3]);
+          if(!isFinite(a)) return m;
+          const na = clamp(a * 0.85, 0.06, 0.30);
+          return `rgba(${parts[0]},${parts[1]},${parts[2]},${na})`;
+        });
       }
     }
-    if((el.type === "pill" || el.type === "button") && el.w && el.h){
-      el.r = el.r || DESIGN_TOKENS_V1.radius.md;
-      el.shadow = el.shadow || DESIGN_TOKENS_V1.shadow.soft;
+
+    // Layout-specific micro tweaks (no schema changes)
+    if(layout==="minimalQuote"){
+      for(const el of elements){
+        if(el?.type==="text" && typeof el.size==="number" && el.size>Math.round((h||1080)*0.075)){
+          el.size = Math.round(el.size * 0.92);
+        }
+      }
     }
   }
 
-  if(layout === "posterHero"){
-    const hasChip = elements.some(e=>e.type==="chip");
-    if(!hasChip && spec.kicker){
-      elements.push({
-        type:"chip",
-        x:Math.round(w*0.08),
-        y:Math.round(h*0.10),
-        text:String(spec.kicker).toUpperCase().slice(0,22),
-        size:Math.round(h*0.028),
-        color: pal.muted
-      });
-    }
-  }
-
-  return elements;
-}
-
-function buildElements(layout, spec){
+  function buildElements(layout, spec){
     const { w,h,pal,brand,tagline,seed } = spec;
     const elements = [];
     const s = seed;
@@ -703,7 +684,11 @@ function buildElements(layout, spec){
       add({ type:"chip", x:Math.round(w*0.14),y:Math.round(h*0.71), text:"@"+brand.replace(/\s+/g,"").toLowerCase(), size:Math.round(h*0.028), color: pal.muted });
     }
 
-    return polishElementsV1(elements, layout, spec);
+    // Canva-grade polish (safe, deterministic)
+    nxApplyArchetypePolishV1(elements, spec, layout);
+
+
+    return elements;
   }
 
   function generateOne(category, prompt, style, idx){
@@ -715,8 +700,19 @@ function buildElements(layout, spec){
     const b = brandFromPrompt(prompt);
 
     const cm = contentModel(prompt, category, intent, seed);
-    const family = pickLayoutFamilyV1(seed, intent, category);
-    const arch = archetypeForFamily(seed, intent, family) || archetypeWithIntent(seed, intent);
+    const arch = archetypeWithIntent(seed, intent);
+    // Instagram: keep results within a small set of proven archetype families,
+    // while still producing up to 200 unique variations via seed + idx.
+    if(category === "Instagram Post"){
+      const fam = nxPickInstagramFamilyV1(seed, idx, intent);
+      if(fam && fam.layout){
+        arch.layout = fam.layout;
+        arch.name = fam.name;
+        arch.family = fam.family;
+      }
+    }
+
+
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
       "Story": "Story #"+(idx+1),
