@@ -205,20 +205,58 @@ function pickCTA(vibe, seed) {
   return pick(list, seed);
 }
 
-function layoutFromHint(hint, seed) {
-  const h = String(hint || "").toLowerCase();
-  if (h.includes("split")) return "splitHero";
-  if (h.includes("badge")) return "badgePromo";
-  if (h.includes("feature")) return "featureGrid";
-  if (h.includes("quote")) return "minimalQuote";
-  if (h.includes("photo")) return "photoCard";
-  // fallback deterministic rotation
-  const rot = ["splitHero","badgePromo","featureGrid","minimalQuote","photoCard"];
+function layoutFromHint(hint, seed, category, w, h) {
+  const text = String(hint || "").toLowerCase();
+  if (text.includes("split")) return "splitHero";
+  if (text.includes("badge")) return "badgePromo";
+  if (text.includes("feature")) return "featureGrid";
+  if (text.includes("quote")) return "minimalQuote";
+  if (text.includes("photo")) return "photoCard";
+  if (text.includes("resume")) return "resumeDoc";
+  if (text.includes("slide") || text.includes("presentation") || text.includes("deck")) return "deckSlide";
+  if (text.includes("story")) return "storyHero";
+
+  // Category-aware default rotation (keeps variety while matching aspect ratio)
+  const cat = String(category || "");
+  const W = Number(w) || 1080;
+  const H = Number(h) || 1080;
+  const ratio = W / Math.max(1, H);
+
+  // Wide canvases (YT, slides)
+  if (cat === "YouTube Thumbnail" || cat === "Presentation Slide" || ratio >= 1.55) {
+    const wide = ["splitHero", "photoCard", "badgePromo", "featureGrid", "minimalQuote", "deckSlide"];
+    return pick(wide, seed);
+  }
+
+  // Tall canvases (stories, resumes)
+  if (cat === "Story" || cat === "Resume" || ratio <= 0.8) {
+    const tall = ["storyHero", "photoCard", "featureGrid", "minimalQuote", "badgePromo", "resumeDoc"];
+    return pick(tall, seed);
+  }
+
+  // Business cards prefer cleaner / brand-forward compositions
+  if (cat === "Business Card") {
+    const card = ["badgePromo", "minimalQuote", "splitHero", "photoCard"];
+    return pick(card, seed);
+  }
+
+  // Default
+  const rot = ["splitHero", "badgePromo", "featureGrid", "minimalQuote", "photoCard"];
   return pick(rot, seed);
 }
 
 function buildElements(layout, spec) {
-  const { w, h, pal, headline, subhead, cta, brand, seed } = spec;
+  const { category: _category, w, h, pal, headline, subhead, cta, brand, seed } = spec;
+
+  // Base scaling: keep typography/spacing consistent across all categories & aspect ratios
+  const category = String(_category || "");
+  const base = Math.min(w, h);
+  const ratio = w / Math.max(1, h);
+
+  const scale = Math.max(0.75, Math.min(1.35, base / 1080));
+  const pad = Math.round(base * (category === "Business Card" ? 0.10 : category === "Resume" ? 0.06 : 0.07));
+  const safeTop = (ratio >= 1.55) ? Math.round(h * 0.06) : 0;
+  const fz = (n) => Math.max(10, Math.round(n * scale));
   const els = [];
   const add = (e) => (els.push(e), e);
 
@@ -226,9 +264,85 @@ function buildElements(layout, spec) {
   add({ type: "bg", x: 0, y: 0, w, h, fill: pal.bg, fill2: pal.bg2, style: "radial" });
 
   // common sizes
-  const pad = Math.round(Math.min(w, h) * 0.07);
-  const H1 = clamp(Math.round(h * 0.07), 40, 110);
-  const H2 = clamp(Math.round(h * 0.04), 22, 64);
+  const H1 = clamp(fz(78), 34, Math.round(h * 0.14));
+  const H2 = clamp(fz(34), 18, Math.round(h * 0.09));
+  // NEW: category-specific archetypes for non-square canvases
+  if (layout === "deckSlide") {
+    // Wide slide: title + bullets + hero media
+    add({ type:"shape", x: 0, y: 0, w, h, r: 0, fill: pal.bg, opacity: 1 });
+    add({ type:"shape", x: pad, y: pad + safeTop, w: Math.round(w * 0.10), h: h - (pad*2 + safeTop), r: 22, fill: pal.accent2, opacity: 0.18 });
+
+    const heroW = Math.round(w * 0.36);
+    const heroH = Math.round(h * 0.72);
+    const heroX = w - pad - heroW;
+    const heroY = pad + safeTop;
+
+    add({ type:"shape", x: heroX, y: heroY, w: heroW, h: heroH, r: 28, fill: pal.panel, opacity: 0.92, stroke: "rgba(255,255,255,0.10)" });
+    add({ type:"image", x: heroX + 18, y: heroY + 18, w: heroW - 36, h: heroH - 36, r: 22, placeholder: "photo" });
+
+    add({ type:"text", x: pad*2, y: pad + safeTop, text: (brand || "").toUpperCase(), size: clamp(fz(18), 14, 24), weight: 800, color: pal.muted, letter: 2 });
+    add({ type:"text", x: pad*2, y: pad + safeTop + Math.round(H2*1.4), text: headline, size: clamp(fz(66), 40, 92), weight: 900, color: pal.ink, letter: -0.5 });
+
+    const bulletText = subhead && String(subhead).trim()
+      ? subhead
+      : "• Key point one\n• Key point two\n• Key point three";
+
+    add({ type:"text", x: pad*2, y: pad + safeTop + Math.round(H2*1.4) + Math.round(clamp(fz(66), 40, 92)*1.18), text: bulletText, size: clamp(fz(28), 18, 44), weight: 600, color: pal.muted, line: 1.35 });
+
+    add({ type:"pill", x: pad*2, y: h - pad - Math.round(H2*2.0), w: Math.round(w * 0.26), h: Math.round(H2*2.0), r: 999, fill: pal.accent, text: cta || "Learn more", textSize: clamp(Math.round(H2*0.9), 14, 28), textColor: "#0B0F1A", weight: 800 });
+
+    return els;
+  }
+
+  if (layout === "resumeDoc") {
+    // Document layout: header + two columns. Best-effort across themes.
+    add({ type:"shape", x: 0, y: 0, w, h, r: 0, fill: pal.bg, opacity: 1 });
+
+    const headerH = Math.round(h * 0.16);
+    const leftW = Math.round(w * 0.34);
+    const gutter = clamp(fz(22), 14, 30);
+
+    add({ type:"shape", x: pad, y: pad, w: w - pad*2, h: headerH, r: 22, fill: pal.panel, opacity: 0.96, stroke: "rgba(255,255,255,0.10)" });
+    add({ type:"text", x: pad + 22, y: pad + 18, text: headline || "Your Name", size: clamp(fz(54), 28, 74), weight: 900, color: pal.ink, letter: -0.3 });
+    add({ type:"text", x: pad + 22, y: pad + 18 + Math.round(clamp(fz(54), 28, 74)*1.1), text: subhead || "Role • Location • Email • Phone", size: clamp(fz(22), 14, 30), weight: 700, color: pal.muted, line: 1.2 });
+
+    const bodyY = pad + headerH + gutter;
+    const bodyH = h - bodyY - pad;
+
+    add({ type:"shape", x: pad, y: bodyY, w: leftW, h: bodyH, r: 22, fill: pal.panel2, opacity: 0.72, stroke: "rgba(255,255,255,0.08)" });
+    add({ type:"text", x: pad + 18, y: bodyY + 16, text: "SKILLS", size: clamp(fz(18), 12, 22), weight: 900, color: pal.ink, letter: 1.5 });
+    add({ type:"text", x: pad + 18, y: bodyY + 16 + Math.round(fz(18)*1.6), text: "• Skill one\n• Skill two\n• Skill three\n• Skill four", size: clamp(fz(20), 12, 26), weight: 650, color: pal.muted, line: 1.35 });
+
+    add({ type:"text", x: pad + 18, y: bodyY + Math.round(bodyH*0.52), text: "EDUCATION", size: clamp(fz(18), 12, 22), weight: 900, color: pal.ink, letter: 1.5 });
+    add({ type:"text", x: pad + 18, y: bodyY + Math.round(bodyH*0.52) + Math.round(fz(18)*1.6), text: "University Name\nDegree • Year", size: clamp(fz(20), 12, 26), weight: 650, color: pal.muted, line: 1.35 });
+
+    const rightX = pad + leftW + gutter;
+    const rightW = w - pad*2 - leftW - gutter;
+    add({ type:"shape", x: rightX, y: bodyY, w: rightW, h: bodyH, r: 22, fill: pal.panel, opacity: 0.55, stroke: "rgba(255,255,255,0.08)" });
+
+    add({ type:"text", x: rightX + 18, y: bodyY + 16, text: "EXPERIENCE", size: clamp(fz(18), 12, 22), weight: 900, color: pal.ink, letter: 1.5 });
+    add({ type:"text", x: rightX + 18, y: bodyY + 16 + Math.round(fz(18)*1.6), text: "Company • Role\n• Achievement one\n• Achievement two\n\nCompany • Role\n• Achievement one\n• Achievement two", size: clamp(fz(20), 12, 26), weight: 650, color: pal.muted, line: 1.35 });
+
+    return els;
+  }
+
+  if (layout === "storyHero") {
+    // Tall story: big media + overlay copy + CTA
+    add({ type:"shape", x: 0, y: 0, w, h, r: 0, fill: pal.bg, opacity: 1 });
+
+    const imgH = Math.round(h * 0.62);
+    add({ type:"shape", x: pad, y: pad, w: w - pad*2, h: imgH, r: 32, fill: pal.panel, opacity: 0.92, stroke: "rgba(255,255,255,0.10)" });
+    add({ type:"image", x: pad + 18, y: pad + 18, w: w - pad*2 - 36, h: imgH - 36, r: 26, placeholder: "photo" });
+
+    add({ type:"shape", x: pad, y: imgH - 24, w: w - pad*2, h: h - imgH + 24, r: 32, fill: pal.accent2, opacity: 0.18 });
+
+    add({ type:"text", x: pad + 26, y: imgH + 18, text: headline, size: clamp(fz(66), 42, 92), weight: 950, color: pal.ink, letter: -0.6 });
+    add({ type:"text", x: pad + 26, y: imgH + 18 + Math.round(clamp(fz(66), 42, 92)*1.05), text: subhead, size: clamp(fz(28), 18, 44), weight: 700, color: pal.muted, line: 1.25 });
+
+    add({ type:"pill", x: pad + 26, y: h - pad - Math.round(H2*2.2), w: Math.round(w * 0.34), h: Math.round(H2*2.2), r: 999, fill: pal.accent, text: cta || "Swipe up", textSize: clamp(Math.round(H2*0.95), 14, 30), textColor: "#0B0F1A", weight: 850 });
+
+    return els;
+  }
 
   if (layout === "splitHero") {
     add({ type:"shape", x: 0, y: 0, w: Math.round(w * 0.58), h, r: 48, fill: pal.bg2, opacity: 0.85 });
@@ -299,8 +413,9 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
   const pal = paletteForStyle(style, baseSeed);
   const brand = brandFromPrompt(prompt).brand;
 
-  const layout = layoutFromHint(layoutHint, baseSeed ^ 0xA5A5);
+  const layout = layoutFromHint(layoutHint, baseSeed ^ 0xA5A5, category, size.w, size.h);
   const elements = buildElements(layout, {
+    category,
     w: size.w, h: size.h, pal, headline, subhead, cta, brand, seed: baseSeed
   });
 
@@ -309,10 +424,7 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
     elements,
     // helpful metadata (non-breaking)
     _layout: layout,
-    // keep the old string field for UI/debug, but ALSO keep the full palette
-    // so TemplateContract can store real colors.
     _palette: pal.name || "Custom",
-    _paletteObj: { ...pal },
     _seed: baseSeed
   };
 }
@@ -365,71 +477,7 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       cta
     });
 
-    // Spine v1: attach semantic roles + stable-ish ids to elements (non-breaking)
-    const elements = Array.isArray(composed.elements) ? composed.elements.map((e) => ({ ...e })) : [];
-    let textSeen = 0;
-    for (const el of elements) {
-      const t = String(el?.type || "").toLowerCase();
-      if (t === "bg") {
-        el.role = "background";
-        el.id = el.id || "bg";
-        continue;
-      }
-      if (t === "photo" || t === "image") {
-        el.role = "image";
-        el.id = el.id || "media";
-        continue;
-      }
-      if (t === "pill") {
-        const txt = String(el?.text || el?.title || "").trim();
-        if (txt && String(cta || "").trim() && txt === String(cta).trim()) {
-          el.role = "cta";
-          el.id = el.id || "cta";
-        } else {
-          el.role = "badge";
-          el.id = el.id || "badge";
-        }
-        continue;
-      }
-      if (t === "badge" || t === "chip") {
-        el.role = "badge";
-        el.id = el.id || (t === "badge" ? "badge" : "chip");
-        continue;
-      }
-      if (t === "text") {
-        textSeen += 1;
-        el.role = textSeen === 1 ? "headline" : "subhead";
-        el.id = el.id || (textSeen === 1 ? "headline" : (textSeen === 2 ? "subhead" : ("text_" + textSeen)));
-        continue;
-      }
-      // Shapes & others default to badge role (decorative)
-      el.role = el.role || "badge";
-      el.id = el.id || ("el_" + Math.random().toString(16).slice(2));
-    }
-
-    // Spine v1: create TemplateContract (pure JSON, no external dependency)
-    const canvasN = {
-      width: Math.round(Number(composed?.canvas?.w || 0)),
-      height: Math.round(Number(composed?.canvas?.h || 0)),
-    };
-    const templateId = `tpl_${seed.toString(16)}_${i + 1}`;
-    const pal = composed?._paletteObj || null;
-    const contract = {
-      version: "v1",
-      templateId,
-      category,
-      canvas: canvasN,
-      palette: pal
-        ? { bg: pal.bg || null, accent: pal.accent || pal.accent2 || null, ink: pal.ink || null }
-        : null,
-      layers: elements.map((e) => ({ id: String(e.id || "layer"), role: String(e.role || "badge"), locked: true })),
-      exportProfiles: [String(category).replace(/\s+/g, "_").toLowerCase()],
-      createdAt: Date.now(),
-    };
-
     templates.push({
-      id: templateId,
-      contract,
       title: `${category} #${i + 1}`,
       subtitle: `${style} • ${a.vibe}`,
       category,
@@ -441,7 +489,7 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       layoutHint: a.layoutHint,
       // AC-V1: the important part
       canvas: composed.canvas,
-      elements,
+      elements: composed.elements,
       // non-breaking metadata
       _layout: composed._layout,
       _palette: composed._palette,
