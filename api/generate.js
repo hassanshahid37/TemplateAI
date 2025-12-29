@@ -315,6 +315,13 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
 }
 
 function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
+
+  // === PHASE_6A2_YT_ARCHETYPES ===
+  const YT_ARCHETYPES = ["face-left","face-right","text-heavy","minimal"];
+  function pickYTArchetype(i){
+    return YT_ARCHETYPES[i % YT_ARCHETYPES.length];
+  }
+
   const words = splitWords(prompt);
   const base = prompt ? titleCase(prompt) : "New Collection";
 
