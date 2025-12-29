@@ -362,7 +362,69 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       cta
     });
 
+    // Spine v1: attach semantic roles + stable ids to elements (non-breaking)
+    const elements = Array.isArray(composed.elements) ? composed.elements.map(e => ({ ...e })) : [];
+    let textSeen = 0;
+    for (const el of elements) {
+      const t = String(el?.type || "").toLowerCase();
+      if (t === "bg") {
+        el.role = "background";
+        el.id = el.id || "bg";
+        continue;
+      }
+      if (t === "photo" || t === "image") {
+        el.role = "image";
+        el.id = el.id || "media";
+        continue;
+      }
+      if (t === "pill") {
+        const txt = String(el?.text || el?.title || "").trim();
+        if (txt && String(cta || "").trim() && txt === String(cta).trim()) {
+          el.role = "cta";
+          el.id = el.id || "cta";
+        } else {
+          el.role = "badge";
+          el.id = el.id || "badge";
+        }
+        continue;
+      }
+      if (t === "badge" || t === "chip") {
+        el.role = "badge";
+        el.id = el.id || (t === "badge" ? "badge" : "chip");
+        continue;
+      }
+      if (t === "text") {
+        textSeen += 1;
+        el.role = (textSeen === 1) ? "headline" : "subhead";
+        el.id = el.id || (textSeen === 1 ? "headline" : (textSeen === 2 ? "subhead" : ("text_" + textSeen)));
+        continue;
+      }
+      // Shapes & others default to badge role (decorative)
+      el.role = el.role || "badge";
+      el.id = el.id || ("el_" + Math.random().toString(16).slice(2));
+    }
+
+    // Spine v1: create TemplateContract (pure JSON, no external dependency)
+    const canvasN = {
+      width: Math.round(Number(composed?.canvas?.w || 0)),
+      height: Math.round(Number(composed?.canvas?.h || 0))
+    };
+    const templateId = `tpl_${seed.toString(16)}_${i + 1}`;
+    const pal = composed?._palette || null;
+    const contract = {
+      version: "v1",
+      templateId,
+      category,
+      canvas: canvasN,
+      palette: pal ? { bg: pal.bg || null, accent: pal.accent || pal.accent2 || null, ink: pal.ink || null } : null,
+      layers: elements.map(e => ({ id: String(e.id || "layer"), role: String(e.role || "badge"), locked: true })),
+      exportProfiles: [String(category).replace(/\s+/g, "_").toLowerCase()],
+      createdAt: Date.now()
+    };
+
     templates.push({
+      id: templateId,
+      contract,
       title: `${category} #${i + 1}`,
       subtitle: `${style} • ${a.vibe}`,
       category,
@@ -374,7 +436,7 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       layoutHint: a.layoutHint,
       // AC-V1: the important part
       canvas: composed.canvas,
-      elements: composed.elements,
+      elements,
       // non-breaking metadata
       _layout: composed._layout,
       _palette: composed._palette,
