@@ -1,5 +1,6 @@
 
 
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -1676,42 +1677,77 @@ function close(){ overlay.style.display = 'none'; }
 
 
 
-<!-- Nexora Detach Mode (Template → Free Edit) -->
+<!-- Nexora Detach Modal (Fixed Logic) -->
+<style>
+#nexora-detach-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.55);
+  display:none; align-items:center; justify-content:center;
+  z-index:9999; font-family:Inter,system-ui,sans-serif;
+}
+#nexora-detach-modal{
+  background:#0f172a; color:#e5e7eb; width:360px;
+  border-radius:14px; padding:20px;
+  box-shadow:0 25px 60px rgba(0,0,0,.5);
+}
+#nexora-detach-modal h3{margin:0 0 6px;font-size:16px;font-weight:600;}
+#nexora-detach-modal p{font-size:13px;color:#cbd5f5;}
+#nexora-detach-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+.nx-btn{padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;}
+.nx-cancel{background:#1e293b;color:#e5e7eb;}
+.nx-ok{background:#2563eb;color:white;}
+</style>
+
+<div id="nexora-detach-overlay">
+  <div id="nexora-detach-modal">
+    <h3>Free Edit Mode</h3>
+    <p>Automation will stop for this design.</p>
+    <div id="nexora-detach-actions">
+      <button class="nx-btn nx-cancel">Cancel</button>
+      <button class="nx-btn nx-ok">Continue</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
-  window.__NEXORA_DETACHED__ = false;
+  let detached = false;
+  let blockedAction = null;
 
-  function confirmDetach(){
-    if (window.__NEXORA_DETACHED__) return true;
-    const ok = confirm(
-      "This action will detach this design from automated templates and Studio campaigns.\n\nYou can edit freely, but automation will stop.\n\nProceed?"
-    );
-    if (ok) window.__NEXORA_DETACHED__ = true;
-    return ok;
+  const overlay = document.getElementById('nexora-detach-overlay');
+  const cancelBtn = overlay.querySelector('.nx-cancel');
+  const okBtn = overlay.querySelector('.nx-ok');
+
+  function showModal(action){
+    blockedAction = action;
+    overlay.style.display = 'flex';
   }
 
-  // Intercept delete/backspace
+  cancelBtn.onclick = () => {
+    blockedAction = null;
+    overlay.style.display = 'none';
+  };
+
+  okBtn.onclick = () => {
+    detached = true;
+    overlay.style.display = 'none';
+    if(blockedAction){ blockedAction(); }
+    blockedAction = null;
+  };
+
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Delete' || e.key === 'Backspace'){
-      if (!confirmDetach()){
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
+    if((e.key === 'Delete' || e.key === 'Backspace') && !detached){
+      e.preventDefault();
+      showModal(() => document.dispatchEvent(new KeyboardEvent('keydown',{key:e.key})));
     }
   }, true);
 
-  // Intercept delete buttons
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('button, [role="button"]');
-    if (!btn) return;
-    const label = (btn.innerText || "").toLowerCase();
-    if (label.includes('delete') || label.includes('remove')){
-      if (!confirmDetach()){
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
+    const btn = e.target.closest('button,[role="button"]');
+    if(!btn || detached) return;
+    const t = (btn.innerText||'').toLowerCase();
+    if(t.includes('delete')){
+      e.preventDefault();
+      showModal(() => btn.click());
     }
   }, true);
 })();
