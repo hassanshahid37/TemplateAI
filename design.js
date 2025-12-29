@@ -1,27 +1,18 @@
 
 /* ===============================
-   Nexora Design System Normalization (Instagram)
-   - Non-breaking
-   - Generation-only discipline
+   Nexora Controlled Variation Layer
+   - Safe, deterministic variations
+   - No layout breakage
    =============================== */
 
-const DESIGN_SYSTEM = {
-  spacing: {
-    margin: 64,
-    gapLarge: 32,
-    gapMedium: 20,
-    gapSmall: 12
-  },
-  typography: {
-    headline: { min: 56, max: 72, weight: 700 },
-    subhead: { min: 28, max: 36, weight: 500 },
-    cta: { min: 20, max: 24, weight: 600 }
-  },
-  alignment: ["left", "center"]
+const VARIATION_MATRIX = {
+  alignment: ["left", "center"],
+  emphasis: ["headline", "image"],
+  density: ["spacious", "compact"]
 };
 
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
+function pickVariation(seed, list) {
+  return list[seed % list.length];
 }
 
 
