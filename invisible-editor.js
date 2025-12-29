@@ -28,7 +28,29 @@
   // Convert generator template -> editor-friendly template (best effort).
   function toEditorTemplate(tpl) {
     if (!tpl) return null;
-    if (Array.isArray(tpl.elements) && tpl.elements.some(e => e && typeof e.title === "string")) return tpl;
+    // If already editor-ready, still ensure a valid contract is present
+    if (Array.isArray(tpl.elements) && tpl.elements.some(e => e && typeof e.title === "string")) {
+      const hasValid = !!(tpl.contract && window.NexoraSpine?.validateContract?.(tpl.contract));
+      if (hasValid) return tpl;
+      // Best-effort: build missing contract from existing elements
+      try{
+        const cv = tpl.canvas || { w: 1080, h: 1080 };
+        const layers = (tpl.elements || []).map(e => ({
+          id: String(e.id || uid()),
+          role: String(e.role || (String(e.type||"").toLowerCase()==="image" ? "image" : "badge"))
+        }));
+        const contract = window.NexoraSpine?.createContract?.({
+          templateId: tpl.id || uid(),
+          category: tpl.category || "Unknown",
+          canvas: cv,
+          palette: tpl.palette || null,
+          layers
+        }) || null;
+        return Object.assign({}, tpl, { contract });
+      }catch(_){
+        return tpl;
+      }
+    }
 
     const src = Array.isArray(tpl.elements) ? tpl.elements : [];
     if (!src.length) return null;
@@ -45,9 +67,20 @@
       let radius = Number(e?.r ?? 24);
       let opacity = Number(e?.opacity ?? 1);
 
+      // Role mapping (spine v1)
+      let role = String(e?.role || "").toLowerCase();
+      if (!role) {
+        if (type === "bg") role = "background";
+        else if (type === "photo" || type === "image") role = "image";
+        else if (type === "pill" && String(e?.text||"") === String(tpl?.cta||"")) role = "cta";
+        else if (type === "pill" || type === "badge" || type === "chip") role = "badge";
+        else if (type === "text") role = "subhead";
+        else role = "badge";
+      }
+
       if (type === "text") { kind = "text"; title = String(e?.text ?? ""); radius = 0; }
       else if (type === "badge" || type === "pill" || type === "chip") { kind = "badge"; title = String(e?.text ?? e?.title ?? "BADGE"); }
-      else if (type === "button" || type === "cta") { kind = "button"; title = String(e?.text ?? e?.title ?? "CTA"); }
+      else if (type === "button" || type === "cta") { kind = "button"; title = String(e?.text ?? e?.title ?? "CTA"); role = role || "cta"; }
       else if (type === "image" || type === "photo") { kind = "image"; title = "IMAGE"; }
       else if (type === "bg") { kind = "bg"; bg = e?.fill || e?.color || bg; title = ""; subtitle = ""; }
 
@@ -56,6 +89,7 @@
 
       return {
         id,
+        role,
         type: kind,
         x, y, w, h,
         title,
@@ -74,6 +108,19 @@
       title: tpl.title || tpl.headline || "Untitled",
       description: tpl.description || tpl.subtitle || "",
       bg: tpl.bg || null,
+      contract: (()=>{
+        try{
+          if(tpl.contract && window.NexoraSpine?.validateContract?.(tpl.contract)) return tpl.contract;
+          const layers = out.map(e => ({ id: String(e.id||uid()), role: String(e.role||"badge") }));
+          return window.NexoraSpine?.createContract?.({
+            templateId: tpl.id || uid(),
+            category: tpl.category || "Unknown",
+            canvas: tpl.canvas || { w: 1080, h: 1080 },
+            palette: tpl._palette || tpl.palette || null,
+            layers
+          }) || null;
+        }catch(_){ return null; }
+      })(),
       canvas: tpl.canvas || { w: 1080, h: 1080 },
       elements: out
     };
