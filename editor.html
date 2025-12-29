@@ -764,7 +764,6 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
   const state = {
     canvas: { w: 1080, h: 1080 },
     title: "Untitled",
-    contract: null, // TemplateContract v1 (spine)
     elements: [],
     selected: new Set(),
     zoom: 1,
@@ -772,27 +771,6 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     history: [],
     future: []
   };
-
-  // Spine helpers (safe, best-effort)
-  function spineActive(){
-    const c = state.contract;
-    if(!c) return false;
-    try{ return !!(window.NexoraSpine?.validateContract?.(c) || (c.version==="v1" && c.layers && c.canvas)); }catch{ return false; }
-  }
-  function isLayerLocked(id){
-    try{
-      if(!spineActive()) return false;
-      const layer = state.contract.layers.find(l => String(l.id) === String(id));
-      return !!layer?.locked;
-    }catch{ return false; }
-  }
-  function firstImageLayerId(){
-    try{
-      if(!spineActive()) return null;
-      const l = state.contract.layers.find(x => String(x.role) === "image");
-      return l ? String(l.id) : null;
-    }catch{ return null; }
-  }
 
   const uid = () => (globalThis.crypto?.randomUUID?.() || ("id_"+Math.random().toString(16).slice(2)+Date.now().toString(16)));
   const safeParse = (s)=>{ try { return JSON.parse(s); } catch { return null; } };
@@ -842,7 +820,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     try{
       const payload = {
         meta: { title: state.title },
-        template: { title: state.title, canvas: state.canvas, contract: state.contract, elements: state.elements },
+        template: { title: state.title, canvas: state.canvas, elements: state.elements },
         createdAt: Date.now()
       };
       localStorage.setItem(KEY_DRAFT, JSON.stringify(payload));
@@ -859,15 +837,11 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
     const tpl = (draft && draft.template) ? draft.template : sel;
     const fitAlready = !!(draft && draft.meta && draft.meta[FIT_META_KEY]);
 
-    // Load TemplateContract (spine) if present
-    state.contract = (tpl && tpl.contract) ? tpl.contract : null;
-
     if(tpl && Array.isArray(tpl.elements)){
       state.title = tpl.title || "Untitled";
       state.canvas = tpl.canvas || state.canvas;
       state.elements = tpl.elements.map(e=>({
         id: e.id || uid(),
-        role: e.role || null,
         type: (e.type || "card"),
         x: Number(e.x ?? 80),
         y: Number(e.y ?? 80),
@@ -1135,11 +1109,6 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
 
   // Actions
   function addElement(){
-    // Spine v1: templates are structural; adding layers is disabled when contract is active.
-    if(spineActive()){
-      alert("This template is locked. You can edit existing text/images, but you can't add new layers.");
-      return;
-    }
     pushHistory();
     const id = uid();
     state.elements.push({
@@ -1155,14 +1124,6 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
 
   function deleteSelected(){
     if(!state.selected.size) return;
-    // Spine v1: prevent deleting locked layers
-    if(spineActive()){
-      const locked = Array.from(state.selected).some(id => isLayerLocked(id));
-      if(locked){
-        alert("This layer is locked by the template.");
-        return;
-      }
-    }
     pushHistory();
     const ids = new Set(state.selected);
     state.elements = state.elements.filter(e=>!ids.has(e.id));
@@ -1172,11 +1133,6 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
 
   function duplicateSelected(){
     if(!state.selected.size) return;
-    // Spine v1: duplicating adds new layers; disabled when contract is active.
-    if(spineActive()){
-      alert("Duplicating layers is disabled for locked templates.");
-      return;
-    }
     pushHistory();
     const sel = Array.from(state.selected);
     const clones = [];
@@ -1212,7 +1168,7 @@ Ctrl+Z / Ctrl+Y = Undo / Redo">⌨</button>
 
   function exportJSON(){
     try{
-      const data = { title: state.title, canvas: state.canvas, contract: state.contract, elements: state.elements };
+      const data = { title: state.title, canvas: state.canvas, elements: state.elements };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -1633,35 +1589,6 @@ function close(){ overlay.style.display = 'none'; }
       if(!file) return;
       // avoid double-add on same event
       const url = URL.createObjectURL(file);
-
-      // Spine v1: in locked templates, IMPORT replaces the image layer instead of adding a new one.
-      if(spineActive()){
-        const selectedId = (state.selected.size === 1) ? Array.from(state.selected)[0] : null;
-        const selectedEl = selectedId ? state.elements.find(x => x.id === selectedId) : null;
-
-        // Prefer replacing selected image if possible
-        const targetId = (selectedEl && selectedEl.type === "image")
-          ? selectedEl.id
-          : (firstImageLayerId() || null);
-
-        const target = targetId ? state.elements.find(x => x.id === targetId && x.type === "image") : null;
-        if(target){
-          pushHistory();
-          target.src = url;
-          target.fit = target.fit || "cover";
-          state.selected.clear();
-          state.selected.add(target.id);
-          render();
-          renderProps();
-          autosave();
-          return;
-        }
-
-        alert("No image layer found in this template.");
-        return;
-      }
-
-      // Unlocked: legacy behavior (add a new image element)
       pushHistory();
       const id = uid();
       state.elements.push({
@@ -1747,6 +1674,48 @@ function close(){ overlay.style.display = 'none'; }
 })();
 </script>
 
+
+
+<!-- Nexora Detach Mode (Template → Free Edit) -->
+<script>
+(function(){
+  window.__NEXORA_DETACHED__ = false;
+
+  function confirmDetach(){
+    if (window.__NEXORA_DETACHED__) return true;
+    const ok = confirm(
+      "This action will detach this design from automated templates and Studio campaigns.\n\nYou can edit freely, but automation will stop.\n\nProceed?"
+    );
+    if (ok) window.__NEXORA_DETACHED__ = true;
+    return ok;
+  }
+
+  // Intercept delete/backspace
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Delete' || e.key === 'Backspace'){
+      if (!confirmDetach()){
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }
+  }, true);
+
+  // Intercept delete buttons
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('button, [role="button"]');
+    if (!btn) return;
+    const label = (btn.innerText || "").toLowerCase();
+    if (label.includes('delete') || label.includes('remove')){
+      if (!confirmDetach()){
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }
+  }, true);
+})();
+</script>
 
 </body>
 </html>
