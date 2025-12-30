@@ -132,16 +132,34 @@
       cm.features = [];
     }
 
-    
-    // YouTube Thumbnail: always prioritize the user prompt as the headline (avoid generic marketing defaults)
-    if((category||"")==="YouTube Thumbnail"){
-      if(p){
-        cm.headline = titleish(p, 42);
-        if(!cm.subhead) cm.subhead = "Click to watch • Key takeaways";
-      }
-    }
+  // YouTube Thumbnail: stronger hooky copy defaults (Phase 6A / YT-1)
+  if(cat.includes("youtube") || cat.includes("yt")){
+    const raw = (prompt||"").trim();
+    const cleaned = raw
+      .replace(/^[\s\-–—:]+/g,"")
+      .replace(/^(why|how|what|when|where|the truth about|truth about)\s+/i,"")
+      .replace(/\?+$/,"")
+      .trim();
 
-return cm;
+    let head = cleaned || "WATCH THIS";
+    const words = head.split(/\s+/).filter(Boolean);
+    if(words.length > 7) head = words.slice(0,7).join(" ");
+    if(head.length > 34) head = head.slice(0,34).trim();
+
+    const hooks = ["SHOCKING", "TRUTH", "SECRET", "MISTAKES", "WARNING", "REAL REASON"];
+    const micro = ["WATCH NOW", "DON'T MISS", "FULL STORY", "NEW VIDEO", "IN 5 MINUTES"];
+    const badge = ["NEW", "2025", "TOP 5", "BREAKDOWN", "EXPOSED", "HOW TO"];
+
+    cm.badge = pick(badge, seed ^ 0x5151);
+    cm.kicker = pick(hooks, seed ^ 0x6161);
+    cm.headline = (head).toUpperCase();
+    cm.subhead = pick(micro, seed ^ 0x7171);
+    cm.cta = "WATCH";
+    cm.body = "";
+    cm.features = [];
+  }
+
+  return cm;
   }
 
   function titleish(text, maxLen){
@@ -264,59 +282,81 @@ return cm;
     return list[list.length-1].v;
   }
 
-  function archetypeWithIntent(seed, intent){
-    // Phase AC-V1: richer poster-first archetypes (still logic-only, no UI changes).
-    const isYT = (intent?.category === "YouTube Thumbnail");
-    const yt = [
-      { name:"YT Face Left",  layout:"ytFaceLeft"  },
-      { name:"YT Face Right", layout:"ytFaceRight" },
-      { name:"YT Text Heavy", layout:"ytTextHeavy" },
-      { name:"YT Minimal",    layout:"ytMinimal"   },
-      { name:"YouTube Bold",  layout:"youtubeBold" }
-    ];
+  function archetypeWithIntent(intent, seed){
+  // Category-specific archetype resolver (Phase 6A / YT-1 final)
+  // Keep the existing spine intact, but route YouTube Thumbnails into a richer set of layouts.
+  const base = archetype(seed);
 
-    const base = isYT ? yt : [
+  const cat = ((intent && intent.category) ? String(intent.category) : "").toLowerCase();
+  const type = ((intent && intent.type) ? String(intent.type) : "generic").toLowerCase();
 
-      { name:"Poster Hero", layout:"posterHero" },
-      { name:"Product Poster", layout:"productPoster" },
-      { name:"Event Flyer", layout:"eventFlyer" },
-      { name:"Split Hero", layout:"splitHero" },
-      { name:"Badge Promo", layout:"badgePromo" },
-      { name:"Feature Grid", layout:"featureGrid" },
-      { name:"Photo Card", layout:"photoCard" },
-      { name:"Minimal Quote", layout:"minimalQuote" },
-      { name:"Big Number", layout:"bigNumber" },
-      { name:"YouTube Bold", layout:"youtubeBold" }
-    ];
+  function pickLayout(weightMap){
+    const entries = Object.entries(weightMap).filter(([,w]) => w > 0);
+    const total = entries.reduce((a,[,w]) => a + w, 0);
+    if(!total) return base.layout;
+    let r = rand(seed ^ 0xBEEF) * total;
+    for(const [k,w] of entries){
+      r -= w;
+      if(r <= 0) return k;
+    }
+    return entries[entries.length-1][0];
+  }
 
-    const t = intent?.type || "generic";
-    const cat = (intent?.category || "").toLowerCase();
-    const s = (seed ^ hash("intent|"+t+"|"+cat)) >>> 0;
-
-    // Layout weighting: bias toward poster compositions for print/social, thumbnail-heavy for YouTube.
-    const weights = {
-      generic:     { posterHero:22, productPoster:18, eventFlyer:12, splitHero:16, badgePromo:12, featureGrid:12, photoCard:14, minimalQuote:10, bigNumber:10, youtubeBold:10 },
-      promo:       { posterHero:16, productPoster:26, eventFlyer:10, splitHero:12, badgePromo:22, featureGrid:12, photoCard:12, minimalQuote:6,  bigNumber:22, youtubeBold:10 },
-      hiring:      { posterHero:18, productPoster:10, eventFlyer:12, splitHero:18, badgePromo:6,  featureGrid:24, photoCard:16, minimalQuote:8,  bigNumber:10, youtubeBold:8  },
-      announcement:{ posterHero:18, productPoster:12, eventFlyer:24, splitHero:16, badgePromo:10, featureGrid:16, photoCard:18, minimalQuote:10, bigNumber:10, youtubeBold:10 },
-      quote:       { posterHero:14, productPoster:6,  eventFlyer:6,  splitHero:10, badgePromo:6,  featureGrid:10, photoCard:12, minimalQuote:34, bigNumber:10, youtubeBold:6  }
+  if(cat.includes("youtube") || cat.includes("yt")){
+    const yt = {
+      generic:  { splitHero: 0.30, photoCard: 0.25, posterHero: 0.20, featureGrid: 0.15, badgePromo: 0.10 },
+      tutorial: { splitHero: 0.35, photoCard: 0.25, featureGrid: 0.20, posterHero: 0.10, badgePromo: 0.10 },
+      listicle: { featureGrid: 0.35, splitHero: 0.25, posterHero: 0.15, badgePromo: 0.15, photoCard: 0.10 },
+      promo:    { badgePromo: 0.40, splitHero: 0.25, posterHero: 0.20, photoCard: 0.15, featureGrid: 0.00 },
+      offer:    { badgePromo: 0.40, splitHero: 0.25, posterHero: 0.20, photoCard: 0.15, featureGrid: 0.00 },
+      quote:    { posterHero: 0.35, minimalQuote: 0.25, splitHero: 0.20, photoCard: 0.20, featureGrid: 0.00 }
     };
 
-    // Category overrides (gentle)
-    const w = { ...(weights[t] || weights.generic) };
-    if(cat.includes("youtube")){
-      w.youtubeBold += 18; w.posterHero -= 6; w.productPoster -= 6;
-    }
-    if(cat.includes("logo")){
-      w.minimalQuote += 10; w.posterHero -= 10; w.productPoster -= 8;
-    }
-    if(cat.includes("business card")){
-      w.featureGrid += 10; w.posterHero -= 10; w.productPoster -= 10;
-    }
+    const weights = yt[type] || yt.generic;
+    const layout = pickLayout(weights);
 
-    const wlist = base.map(a=>({ w: w[a.layout] ?? 10, v: a }));
-    return weightedPick(wlist, s);
+    const nameByLayout = {
+      splitHero: "YouTube Face",
+      photoCard: "YouTube Photo",
+      featureGrid: "YouTube List",
+      badgePromo: "YouTube Badge",
+      posterHero: "YouTube Bold",
+      minimalQuote: "YouTube Quote"
+    };
+
+    return { ...base, name: nameByLayout[layout] || "YouTube", layout };
   }
+
+  // Non-YouTube: keep existing behavior (small type-based bias only).
+  const w = {
+    generic: 0.18,
+    posterHero: 0.22,
+    splitHero: 0.16,
+    badgePromo: 0.14,
+    featureGrid: 0.12,
+    photoCard: 0.10,
+    minimalQuote: 0.04,
+    bigNumber: 0.04
+  };
+
+  if(type === "quote") { w.minimalQuote += 0.20; w.posterHero += 0.05; }
+  if(type === "promo" || type === "offer") { w.badgePromo += 0.20; w.posterHero += 0.05; }
+  if(type === "listicle") { w.featureGrid += 0.20; w.splitHero += 0.05; }
+  if(type === "tutorial") { w.splitHero += 0.15; w.photoCard += 0.05; }
+
+  const layout = pickLayout(w);
+  const nameByLayout = {
+    posterHero: "Poster Hero",
+    splitHero: "Split Hero",
+    badgePromo: "Badge Promo",
+    featureGrid: "Feature Grid",
+    photoCard: "Photo Card",
+    minimalQuote: "Minimal Quote",
+    bigNumber: "Big Number"
+  };
+
+  return { ...base, name: nameByLayout[layout] || base.name, layout };
+}
 
   function normalizeStyleName(style){
     return (style||"Dark Premium").trim();
@@ -542,73 +582,7 @@ return cm;
     }
 
 
-    
-
-    if(layout==="ytFaceLeft" || layout==="ytFaceRight"){
-      // Thumbnail: subject/photo on one side, text stack on the other
-      const faceOnLeft = (layout==="ytFaceLeft");
-      // full-bleed photo base + dark overlay for readability
-      add({ type:"photo", src: photoSrcA, x:0,y:0,w,h, r:0, opacity:1 });
-      const overlayDir = faceOnLeft ? "to right" : "to left";
-      add({ type:"shape", x:0,y:0,w,h, r:0, fill:`linear-gradient(${overlayDir}, rgba(0,0,0,0.78), rgba(0,0,0,0.05))`, opacity:1 });
-
-      const pad = Math.round(w*0.06);
-      const colW = Math.round(w*0.54);
-      const x0 = faceOnLeft ? Math.round(w*0.40) : pad;
-      const y0 = Math.round(h*0.12);
-
-      add({ type:"text", x:x0, y:y0, w:colW, text: headline, align:"left",
-            font:"Inter", size: Math.round(h*0.11), weight: 900, color:"#fff", lh: 0.94 });
-      add({ type:"text", x:x0, y:y0+Math.round(h*0.28), w:colW, text: subhead, align:"left",
-            font:"Inter", size: Math.round(h*0.045), weight: 600, color:"rgba(255,255,255,0.90)", lh: 1.2 });
-
-      // CTA pill
-      const pillW = Math.round(colW*0.68);
-      const pillH = Math.round(h*0.10);
-      const pillY = Math.round(h*0.78);
-      add({ type:"shape", x:x0, y:pillY, w:pillW, h:pillH, r: Math.round(pillH/2),
-            fill:"rgba(255,255,255,0.16)", stroke:"rgba(255,255,255,0.25)", sw: 1 });
-      add({ type:"text", x:x0, y:pillY+Math.round(pillH*0.24), w:pillW, text: cta, align:"center",
-            font:"Inter", size: Math.round(h*0.05), weight: 800, color:"#fff" });
-    }
-
-    if(layout==="ytTextHeavy"){
-      // Thumbnail: strong typographic hierarchy, minimal shapes (no photo dependence)
-      add({ type:"shape", x:0,y:0,w,h, r:0, fill: pal.bg, opacity:1 });
-      add({ type:"shape", x:Math.round(w*0.05), y:Math.round(h*0.08), w:Math.round(w*0.90), h:Math.round(h*0.84),
-            r: Math.round(h*0.06), fill:"rgba(255,255,255,0.08)", stroke:"rgba(255,255,255,0.16)", sw:1 });
-
-      const pad = Math.round(w*0.10);
-      add({ type:"text", x:pad, y:Math.round(h*0.20), w:Math.round(w*0.80), text: headline, align:"left",
-            font:"Inter", size: Math.round(h*0.13), weight: 950, color:"#fff", lh: 0.92 });
-      add({ type:"text", x:pad, y:Math.round(h*0.56), w:Math.round(w*0.80), text: subhead, align:"left",
-            font:"Inter", size: Math.round(h*0.048), weight: 650, color:"rgba(255,255,255,0.90)", lh: 1.22 });
-
-      // Accent underline
-      add({ type:"shape", x:pad, y:Math.round(h*0.50), w:Math.round(w*0.22), h:Math.round(h*0.012),
-            r: Math.round(h*0.012/2), fill: pal.accent });
-    }
-
-    if(layout==="ytMinimal"){
-      // Thumbnail: clean, large whitespace, one focal message + small brand chip
-      add({ type:"shape", x:0,y:0,w,h, r:0, fill: pal.bg, opacity:1 });
-      const pad = Math.round(w*0.08);
-
-      // brand chip
-      const chipW = Math.round(w*0.22);
-      const chipH = Math.round(h*0.10);
-      add({ type:"shape", x:pad, y:pad, w:chipW, h:chipH, r: Math.round(chipH/2),
-            fill:"rgba(0,0,0,0.25)", stroke:"rgba(255,255,255,0.18)", sw:1 });
-      add({ type:"text", x:pad, y:pad+Math.round(chipH*0.24), w:chipW, text: brand || "Nexora", align:"center",
-            font:"Inter", size: Math.round(h*0.042), weight: 800, color:"#fff" });
-
-      // headline
-      add({ type:"text", x:pad, y:Math.round(h*0.32), w:Math.round(w*0.84), text: headline, align:"left",
-            font:"Inter", size: Math.round(h*0.12), weight: 900, color:"#fff", lh: 0.95 });
-      add({ type:"text", x:pad, y:Math.round(h*0.66), w:Math.round(w*0.84), text: cta, align:"left",
-            font:"Inter", size: Math.round(h*0.055), weight: 700, color:"rgba(255,255,255,0.85)", lh: 1.2 });
-    }
-if(layout==="splitHero"){
+    if(layout==="splitHero"){
       add({ type:"shape", x:0,y:0,w:Math.round(w*0.56),h, r:48, fill: pal.bg2, opacity:0.85 });
       add({ type:"shape", x:Math.round(w*0.53),y:Math.round(h*0.1),w:Math.round(w*0.42),h:Math.round(h*0.55), r:48, stroke:"rgba(255,255,255,0.14)", fill:"rgba(255,255,255,0.04)" });
       add({ type:"text", x:Math.round(w*0.07),y:Math.round(h*0.14), text: brand.toUpperCase(), size:Math.round(h*0.055), weight:800, color: pal.ink, letter: -0.5 });
