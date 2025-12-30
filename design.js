@@ -233,59 +233,43 @@
   
   // === Phase AD: Intent Biasing (no UI changes) ===
   function classifyIntent(prompt, category, style){
-    const pRaw = (prompt||"").trim();
-    const p = pRaw.toLowerCase();
+    const p = (prompt||"").toLowerCase();
     const has = (arr)=>arr.some(k=>p.includes(k));
     const intent = {
-      type: "generic",     // generic|insight|promo|announcement|quote|event|hiring
-      energy: "medium",    // low|medium|high
-      density: "balanced", // text|balanced|visual
-      ctaMode: "generic"   // hiring|promo|info|brand|generic|learn
+      type: "generic",
+      energy: "medium",   // low|medium|high
+      density: "balanced",// text|balanced|visual
+      ctaMode: "generic"  // hiring|promo|info|brand|generic
     };
 
-    // Educational / informational (critical for YouTube thumbnails)
-    // Examples: "why X", "how to Y", "top 10 Z", "X explained"
-    if(/^(why|how|what|when|where|who)/.test(p) || has(["explained","explain","guide","tutorial","tips","mistakes","secrets","reasons","steps","strategy","strategies","learn","lesson","lessons","truth","myth","myths"])){
-      intent.type="insight"; intent.energy="high"; intent.density="balanced"; intent.ctaMode="learn";
-    } else if(has(["hiring","we are hiring","job","jobs","vacancy","vacancies","career","careers","apply","join our team","recruit"])){
+    if(has(["hiring","we are hiring","job","jobs","vacancy","vacancies","career","careers","apply","join our team","recruit"])){
       intent.type="hiring"; intent.energy="medium"; intent.density="text"; intent.ctaMode="hiring";
     } else if(has(["sale","discount","%","off","limited","offer","deal","flash","promo","promotion","black friday","clearance"])){
       intent.type="promo"; intent.energy="high"; intent.density="balanced"; intent.ctaMode="promo";
-    } else if(has(["launch","new","update","announcement","announcing","introducing","release","event","webinar","workshop","meetup","conference"])){
+    } else if(has(["launch","new","update","announcement","announcing","introducing","event","webinar","workshop","meetup","conference"])){
       intent.type="announcement"; intent.energy="medium"; intent.density="balanced"; intent.ctaMode="info";
-    } else if(has(["quote","inspiration","motivational","motivation","wisdom","life","success"])){
+    } else if(has(["quote","motiv","inspir","mindset","success","dream","life"]) || (p.split(/\s+/).filter(Boolean).length<=6 && !has(["sale","discount","hiring","job"]))){
       intent.type="quote"; intent.energy="low"; intent.density="text"; intent.ctaMode="brand";
-    } else if(has(["conference","summit","meetup","webinar","workshop","live","tickets"])){
-      intent.type="event"; intent.energy="medium"; intent.density="balanced"; intent.ctaMode="info";
     }
 
     // Category bias
-    const c = (category||"").toLowerCase();
-    if(c.includes("resume")){
+    const cat = (category||"").toLowerCase();
+    if(cat.includes("presentation") || cat.includes("slide") || cat.includes("resume")){
       // more structured & text-friendly by default
       if(intent.density==="visual") intent.density="balanced";
       if(intent.energy==="high") intent.energy="medium";
-      intent.ctaMode = "generic";
     }
-    if(c.includes("youtube")){
-      // YouTube thumbnails benefit from high energy and readable, short copy
-      if(intent.type==="generic") intent.type="insight";
-      if(intent.energy==="low") intent.energy="medium";
-      if(intent.density==="text") intent.density="balanced";
-      if(intent.ctaMode==="generic") intent.ctaMode="learn";
-    }
-
     // Style bias (keep premium and consistent)
     const st = (style||"").toLowerCase();
     if(st.includes("corporate") && intent.type==="promo"){
       // corporate promos should be less loud
       intent.energy="medium";
     }
-
     intent.category = category || "";
     return intent;
   }
-function weightedPick(list, seed){
+
+  function weightedPick(list, seed){
     // list: [{w:number, v:any}, ...]
     let total = 0;
     for(const it of list) total += Math.max(0, it.w||0);
@@ -677,6 +661,22 @@ function weightedPick(list, seed){
     const b = brandFromPrompt(prompt);
 
     const cm = contentModel(prompt, category, intent, seed);
+
+    // Spine-first: canonical doc for this template (P4 binding source of truth)
+    let spineDoc = null;
+    try{
+      if(window.NexoraSpine && typeof window.NexoraSpine.createDoc === 'function'){
+        spineDoc = window.NexoraSpine.createDoc({ category, style, prompt, notes: '', seed });
+        // If spine content exists, prefer it for binding
+        if(spineDoc && spineDoc.content){
+          cm.headline = String(spineDoc.content.headline || cm.headline || '');
+          cm.subhead  = String(spineDoc.content.subhead  || cm.subhead  || '');
+          cm.cta      = String(spineDoc.content.cta      || cm.cta      || '');
+          cm.badge    = String(spineDoc.content.badge    || cm.badge    || '');
+        }
+      }
+    }catch(_){ spineDoc = null; }
+
     const arch = archetypeWithIntent(seed, intent);
 
     const titleByCategory = {
@@ -769,6 +769,7 @@ function weightedPick(list, seed){
     return {
       id: "tpl_"+seed.toString(16),
       contract,
+      doc: spineDoc || null,
       title: titleByCategory[category] || (category+" #"+(idx+1)),
       description: normalizeStyleName(style)+" • "+arch.name+" • "+(intent.type||"generic"),
       category,
