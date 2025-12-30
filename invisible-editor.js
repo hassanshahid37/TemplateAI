@@ -1,3 +1,4 @@
+
 // invisible-editor.js — Editor Handoff Fix (AD-H3)
 // Goal: ALWAYS hand off generated template into editor.
 // Strategy:
@@ -14,6 +15,7 @@
   const KEY_LAST = "NEXORA_LAST_TEMPLATES";
   const KEY_SELECTED = "nexora_selected_template_v1";
   const KEY_DRAFT = "templify_draft";
+  const KEY_ACTIVE_DOC = "NEXORA_ACTIVE_DOC_V1";
   const KEY_SETTINGS = "nexora_last_settings_v1";
 
   function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
@@ -161,6 +163,12 @@
       template: converted,
       createdAt: Date.now()
     });
+
+    // Spine: persist canonical doc if present on the original template
+    try{
+      const doc = (tpl && tpl.doc) ? tpl.doc : null;
+      if(doc) safeSet(KEY_ACTIVE_DOC, doc);
+    }catch(_){ }
 
     // Notify editor (some apps listen to storage event)
     try {
