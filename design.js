@@ -62,6 +62,14 @@
       speakers: [],
       smallprint: ""
     };
+    // FORCE prompt-driven headline for YouTube Thumbnails (Phase 6B.1 fix)
+    if(String(category||"").toLowerCase().includes("youtube")){
+      if(p){
+        cm.headline = p.toUpperCase().slice(0, 48);
+        cm.subhead = "";
+      }
+    }
+
 
     const it = intent?.type || "generic";
     const cat = String(category||"");
