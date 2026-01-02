@@ -1306,32 +1306,127 @@ function loadDraft(){
 
   function drawElement(ctx, el){
     if (!el || !el.type) return;
+    const type = String(el.type).toLowerCase();
     const x = Number(el.x || 0);
     const y = Number(el.y || 0);
     const w = Number(el.w || 0);
     const h = Number(el.h || 0);
     const opacity = clamp(el.opacity == null ? 1 : el.opacity, 0, 1);
-    const radius = clamp(el.radius || 0, 0, Math.min(w, h) / 2);
+    const radius = clamp(el.radius ?? el.r ?? 0, 0, Math.min(w, h) / 2);
 
     ctx.save();
     ctx.globalAlpha = opacity;
 
-    // Optional background box (for shapes/text blocks)
+    // Helper: fill rounded rect
+    const fillRoundRect = (fill, stroke)=>{
+      if(fill && fill !== 'transparent'){
+        ctx.fillStyle = fill;
+        roundRectPath(ctx, x, y, w, h, radius);
+        ctx.fill();
+      }
+      if(stroke && stroke !== 'transparent'){
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = clamp(el.strokeWidth || 2, 0.5, 12);
+        roundRectPath(ctx, x, y, w, h, radius);
+        ctx.stroke();
+      }
+    };
+
+    // --- Background / Shapes ---
+    if (type === 'bg'){
+      // Prefer fill; support fill2/style lightly (export uses first fill)
+      const fill = el.fill || el.bg || '#0b1020';
+      ctx.fillStyle = fill;
+      ctx.fillRect(0, 0, w || ctx.canvas.width, h || ctx.canvas.height);
+      ctx.restore();
+      return;
+    }
+
+    if (type === 'shape' || type === 'card'){
+      fillRoundRect(el.fill || el.bg || 'rgba(255,255,255,0.08)', el.stroke);
+      ctx.restore();
+      return;
+    }
+
+    if (type === 'pill'){
+      // pill: rounded rect + text centered-ish
+      const rr = clamp(el.r ?? el.radius ?? 999, 0, Math.min(w,h)/2);
+      const oldR = radius;
+      const pillFill = el.fill || el.bg || 'rgba(255,255,255,0.10)';
+      const pillStroke = el.stroke;
+      // draw pill
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = pillFill;
+      roundRectPath(ctx, x, y, w, h, rr);
+      ctx.fill();
+      if(pillStroke){
+        ctx.strokeStyle = pillStroke;
+        ctx.lineWidth = clamp(el.strokeWidth || 2, 0.5, 12);
+        roundRectPath(ctx, x, y, w, h, rr);
+        ctx.stroke();
+      }
+      // text
+      const t = String(el.text || el.title || '');
+      if(t){
+        const fontSize = clamp(el.tsize || el.fontSize || 28, 1, 500);
+        const weight = el.tweight ? String(el.tweight) : (el.weight ? String(el.weight) : '800');
+        const fontFamily = el.fontFamily || 'Arial';
+        ctx.fillStyle = el.tcolor || el.color || '#ffffff';
+        ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillText(t, x + w/2, y + h/2);
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (type === 'dot'){
+      const r = clamp(el.r || radius || 8, 0, 500);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.closePath();
+      ctx.fillStyle = el.fill || el.bg || '#ffffff';
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if (type === 'chip'){
+      // chip: just draw text (no bg by default)
+      const t = String(el.text || el.title || '');
+      if(t){
+        const fontSize = clamp(el.size || el.fontSize || 20, 1, 300);
+        const weight = el.weight ? String(el.weight) : '700';
+        const fontFamily = el.fontFamily || 'Arial';
+        ctx.fillStyle = el.color || '#ffffff';
+        ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.fillText(t, x, y);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // Optional background box (for text blocks)
     if (el.bg && el.bg !== 'transparent'){
       ctx.fillStyle = el.bg;
       roundRectPath(ctx, x, y, w, h, radius);
       ctx.fill();
     }
 
-    if (el.type === 'text'){
-      const fontSize = clamp(el.fontSize || 32, 1, 500);
-      const weight = el.weight ? String(el.weight) : '400';
+    if (type === 'text'){
+      const fontSize = clamp(el.fontSize || el.size || 32, 1, 500);
+      const weight = el.weight ? String(el.weight) : (el.fontWeight ? String(el.fontWeight) : '400');
       const fontFamily = el.fontFamily || 'Arial';
       ctx.fillStyle = el.color || '#ffffff';
       ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
       ctx.textBaseline = 'top';
       const padding = clamp(el.padding || 0, 0, 200);
       const text = String(el.title || el.text || '');
+
       // Basic wrapping inside the box
       const maxW = Math.max(0, w - padding*2);
       const words = text.split(/\s+/);
