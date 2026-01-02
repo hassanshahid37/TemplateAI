@@ -116,8 +116,11 @@
       position:relative;
       overflow:hidden;
     }
-    .thumb{
-      height:84px;
+    \.thumb{
+      width:100%;
+      aspect-ratio: 16 / 9;
+      height:auto;
+      display:block;
       border-radius:12px;
       margin-bottom:10px;
       position:relative;
@@ -416,10 +419,11 @@
 
       const w = Math.max(1, thumb.clientWidth || 260);
       const h = Math.max(1, thumb.clientHeight || 84);
-      const sx = w / W0;
-      const sy = h / H0;
+      const s = Math.min(w / W0, h / H0);
+      const ox = (w - W0 * s) / 2;
+      const oy = (h - H0 * s) / 2;
 
-      // --- background ---
+// --- background ---
       let bgCss = bg || null;
       if(!bgCss && Array.isArray(elements)){
         const bgEl = elements.find(e => ["background","bg"].includes(String(e.type||"").toLowerCase()));
@@ -454,10 +458,10 @@
 
       // helper
       const place = (el, e) => {
-        const x = Number(e.x ?? 0) * sx;
-        const y = Number(e.y ?? 0) * sy;
-        const ww = Number(e.w ?? e.width ?? 120) * sx;
-        const hh = Number(e.h ?? e.height ?? 40) * sy;
+        const x = (Number(e.x ?? 0) * s) + ox;
+        const y = (Number(e.y ?? 0) * s) + oy;
+        const ww = (Number(e.w ?? e.width ?? 120) * s);
+        const hh = (Number(e.h ?? e.height ?? 40) * s);
         el.style.position = "absolute";
         el.style.left = x + "px";
         el.style.top = y + "px";
@@ -885,12 +889,23 @@ function renderTemplatesFromList(list){
       div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
 
       const thumb = div.querySelector(".thumb");
-      if(thumb) drawThumb(thumb, tpl, tpl.bg);
+      if(thumb){
+        const W = Number(tpl?.canvas?.w || 980);
+        const H = Number(tpl?.canvas?.h || 620);
+        // Lock preview tile aspect ratio to the real canvas (Canva-style: scale, never stretch)
+        thumb.style.aspectRatio = `${W} / ${H}`;
+      }
+
+      grid.appendChild(div);
+
+      // Draw after layout so clientWidth/clientHeight are correct
+      if(thumb){
+        requestAnimationFrame(()=>drawThumb(thumb, tpl, tpl.bg));
+      }
 
       div.addEventListener("click", ()=>openEditorWith(tpl));
       div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(tpl); });
-      grid.appendChild(div);
-    });
+          });
 
     // expose for debugging
     window.NEXORA = window.NEXORA || {};
