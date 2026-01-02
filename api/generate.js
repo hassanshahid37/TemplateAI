@@ -3,11 +3,6 @@
 // IMPORTANT: This endpoint is intentionally deterministic + lightweight.
 // It should NEVER throw; it returns usable defaults even on bad input.
 
-
-// Optional Spine integration (adds docs/contracts while preserving legacy "templates")
-let Spine = null;
-try{ Spine = require("./spine-core.js"); }catch(_){ try{ Spine = require("../spine-core.js"); }catch(__){} }
-
 function safeJson(req){
   return new Promise((resolve) => {
     try{
@@ -91,21 +86,13 @@ module.exports = async (req, res) => {
     const count = clampInt(body?.count, 1, 200);
 
     const templates = [];
-    const docs = [];
     for(let i=0;i<count;i++){
-      const t = makeCopy({ category, style, prompt, notes }, i);
-      templates.push(t);
-      if(Spine && typeof Spine.createDoc === "function"){
-        try{
-          const doc = Spine.createDoc({ category, style, prompt, notes, seed: (t?.seed ?? i) });
-          docs.push(doc);
-        }catch(_){ docs.push(null); }
-      }
+      templates.push(makeCopy({ category, style, prompt, notes }, i));
     }
 
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ ok:true, templates, docs: (docs.length ? docs : undefined) }));
+    res.end(JSON.stringify({ ok:true, templates }));
   }catch(_){
     // Never throw
     try{
