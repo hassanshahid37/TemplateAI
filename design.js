@@ -320,7 +320,7 @@
     };
 
     const weights = yt[type] || yt.generic;
-    const layout = pickLayout(weights);
+    const layout = (category === "YouTube Thumbnail") ? "ytBrutalV1" : pickLayout(weights);
 
     const nameByLayout = {
       splitHero: "YouTube Face",
@@ -511,53 +511,48 @@
     const photoSrcB = smartPhotoSrc((s^hash("B"))>>>0, pal, (tHeadline.split(" ")[0]||photoLabel));
 
     if(layout==="ytCanvaV1"){
-      // 16:9 YouTube Thumbnail — Canva-style: bold headline, hero media, badge + CTA, strong contrast.
-      // IMPORTANT: keep element types compatible across preview + editor export (avoid custom-only types).
-      const pad = M;
-      const rightX = Math.round(w*0.56);
-      const rightW = Math.round(w*0.40);
-      const rightY = Math.round(h*0.08);
-      const rightH = Math.round(h*0.84);
+  // 16:9 YouTube Thumbnail — Canva-style: bold headline, hero media, badge + CTA, strong contrast.
+  const pad = M;
+  const rightX = Math.round(w*0.56);
+  const rightW = Math.round(w*0.40);
+  const rightY = Math.round(h*0.08);
+  const rightH = Math.round(h*0.84);
 
-      // Back glow behind hero
-      add({ type:"shape", x:Math.round(w*0.48), y:Math.round(-h*0.10), w:Math.round(w*0.70), h:Math.round(h*1.20), r:140,
-            fill:`radial-gradient(circle at 30% 30%, ${pal.accent2}55, transparent 60%)`, opacity:1 });
+  // Back glow behind hero
+  add({ type:"shape", x:Math.round(w*0.48), y:Math.round(-h*0.10), w:Math.round(w*0.70), h:Math.round(h*1.20), r:140,
+        fill:`radial-gradient(circle at 30% 30%, ${pal.accent2}55, transparent 60%)`, opacity:1 });
 
-      // Text readability panel
-      add({ type:"shape", x:pad, y:pad, w:Math.round(w*0.48), h:Math.round(h*0.74), r:46,
-            fill: glass ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.22)",
-            stroke:"rgba(255,255,255,0.18)" });
+  // Glass panel for text (ensures readability over any bg)
+  add({ type:"card", x:pad, y:pad, w:Math.round(w*0.48), h:Math.round(h*0.74), r:46,
+        fill: glass ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.22)",
+        stroke:"rgba(255,255,255,0.18)" });
 
-      // Hero media (right)
-      add({ type:"shape", x:rightX-14, y:rightY+12, w:rightW+22, h:rightH+12, r:54, fill:"rgba(0,0,0,0.22)", opacity:1 });
-      add({ type:"photo", src: photoSrcA, x:rightX, y:rightY, w:rightW, h:rightH, r:52, stroke:"rgba(255,255,255,0.20)" });
+  // Hero media card (right)
+  add({ type:"shape", x:rightX-14, y:rightY+12, w:rightW+22, h:rightH+12, r:54, fill:"rgba(0,0,0,0.22)", opacity:1 });
+  add({ type:"photo", src: photoSrcA, x:rightX, y:rightY, w:rightW, h:rightH, r:52, stroke:"rgba(255,255,255,0.20)" });
 
-      // Badge (top-left)
-      add({ type:"badge", x:pad+22, y:pad+22, w:Math.round(w*0.22), h:Math.round(h*0.10), r:999,
-            fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020", tsize:Math.round(h*0.040), tweight:900 });
+  // Badge (top-left)
+  add({ type:"badge", x:pad+22, y:pad+22, w:Math.round(w*0.22), h:Math.round(h*0.10), r:999,
+        fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020", tsize:Math.round(h*0.040), tweight:900 });
 
-      // Headline
-      add({ type:"text", x:pad+22, y:Math.round(h*0.20), text:tHeadline.toUpperCase(), size:Math.round(h*0.120), weight:950, color: pal.ink, letter:-1.2 });
+  // Headline
+  add({ type:"text", x:pad+22, y:Math.round(h*0.20), text:tHeadline.toUpperCase(), size:Math.round(h*0.120), weight:950, color: pal.ink, letter:-1.2 });
 
-      // Subhead
-      add({ type:"text", x:pad+22, y:Math.round(h*0.44), text:tSub, size:Math.round(h*0.050), weight:700, color:"rgba(255,255,255,0.88)" });
+  // Subhead
+  add({ type:"text", x:pad+22, y:Math.round(h*0.44), text:tSub, size:Math.round(h*0.050), weight:700, color:"rgba(255,255,255,0.88)" });
 
-      // CTA pill
-      add({ type:"pill", x:pad+22, y:Math.round(h*0.62), w:Math.round(w*0.28), h:Math.round(h*0.11), r:999,
-            fill: pal.accent, text:tCTA, tcolor:"#071423", tsize:Math.round(h*0.045), tweight:900 });
+  // CTA pill
+  add({ type:"pill", x:pad+22, y:Math.round(h*0.62), w:Math.round(w*0.28), h:Math.round(h*0.11), r:999,
+        fill: pal.accent, text:tCTA, tcolor:"#071423", tsize:Math.round(h*0.045), tweight:900 });
 
-      // Small brand tag
-      add({ type:"chip", x:pad+26, y:Math.round(h*0.74), text:(brand||"Nexora").toUpperCase(), size:Math.round(h*0.034), color:"rgba(255,255,255,0.70)" });
+  // Small brand tag
+  add({ type:"chip", x:pad+26, y:Math.round(h*0.74), text:(brand||"Nexora").toUpperCase(), size:Math.round(h*0.034), color:"rgba(255,255,255,0.70)" });
 
-      // Decorative micro dots (use supported primitive dots)
-      const dx = Math.round(w*0.47);
-      const dy = Math.round(h*0.13);
-      for(let k=0;k<10;k++){
-        add({ type:"dot", x:dx + (k%5)*Math.round(w*0.012), y:dy + Math.floor(k/5)*Math.round(h*0.030), r:3, fill:"rgba(255,255,255,0.22)" });
-      }
+  // Decorative dots
+  add({ type:"dots", x:Math.round(w*0.44), y:Math.round(h*0.10), w:Math.round(w*0.10), h:Math.round(h*0.12), fill:"rgba(255,255,255,0.18)" });
 
-      return elements;
-    }
+  return elements;
+}
 
 if(layout==="posterHero"){
       // Full-bleed hero photo with gradient overlay + strong typography.
@@ -873,7 +868,7 @@ if(layout==="posterHero"){
         container.appendChild(d);
         continue;
       }
-      if(e.type==="shape" || e.type==="card"){
+      if(e.type==="shape"){
         const d=mk("div");
         d.style.position="absolute";
         d.style.left=(e.x*scale)+"px"; d.style.top=(e.y*scale)+"px";
@@ -1149,3 +1144,40 @@ function applyIntentScene(template, intent) {
     };
   }
 })();
+
+
+// ===============================
+// YT Brutal Layout (client-only)
+// ===============================
+function buildYTBrutalV1({ w, h, pal, seed, headline }) {
+  const els = [];
+  const add = (o)=>els.push(o);
+
+  const safe = Math.round(Math.min(w,h) * 0.06);
+  const leftW = Math.round(w * 0.38);
+  const heroX = leftW - Math.round(w * 0.03);
+  const heroW = w - heroX + Math.round(w * 0.06);
+  const heroY = -Math.round(h * 0.06);
+  const heroH = h + Math.round(h * 0.12);
+
+  const clean = String(headline||"WATCH THIS").toUpperCase().split(/\s+/).slice(0,5).join(" ");
+  const badgeTxt = ["NEW","TRUTH","SECRET","EXPOSED","TOP 5","WARNING"][seed%6];
+  const kickerTxt = ["SHOCKING","REAL REASON","WATCH NOW","DON'T DO THIS"][seed%4];
+
+  // dark slab
+  add({ type:"shape", x:0, y:0, w:leftW, h:h, fill:"rgba(0,0,0,0.58)" });
+  // hero
+  add({ type:"photo", x:heroX, y:heroY, w:heroW, h:heroH });
+  // badge
+  add({ type:"pill", x:safe, y:safe, w:leftW*0.55, h:h*0.09, fill: pal.accent||"#ffd400", text:badgeTxt });
+  // kicker
+  add({ type:"text", x:safe, y:safe+h*0.12, text:kickerTxt, size:h*0.05, weight:900, color:"#fff" });
+  // headline shadow
+  add({ type:"text", x:safe+10, y:safe+h*0.22+10, w:leftW-safe*2, text:clean, size:h*0.22, weight:900, color:"#000" });
+  // headline
+  add({ type:"text", x:safe, y:safe+h*0.22, w:leftW-safe*2, text:clean, size:h*0.22, weight:900, color:"#fff" });
+  // CTA
+  add({ type:"pill", x:safe, y:h-safe-h*0.11, w:leftW*0.62, h:h*0.11, fill: pal.accent2||pal.accent||"#2f7bff", text:"WATCH NOW" });
+
+  return els;
+}
