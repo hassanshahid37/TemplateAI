@@ -14,16 +14,6 @@
     return (h>>>0);
   };
 
-  // Deterministic PRNG (0..1). Several layout routers rely on this.
-  // design.js is dependency-free, so we embed a tiny seeded generator here.
-  function rand(seed){
-    // Mulberry32-style hash to float
-    let t = (seed >>> 0) + 0x6D2B79F5;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  }
-
   const CATEGORIES = {
     "Instagram Post": { w:1080,h:1080, ratio:"1:1", kind:"social" },
     "Story": { w:1080,h:1920, ratio:"9:16", kind:"story" },
@@ -144,6 +134,12 @@
 
   // YouTube Thumbnail: stronger hooky copy defaults (Phase 6A / YT-1)
   if(cat.includes("youtube") || cat.includes("yt")){
+    // Phase YT-L1: hard-coded Canva-level YouTube thumbnail layout (single layout, strong hierarchy).
+    // You can disable later by setting: window.__NEXORA_FORCE_YT_CANVA_V1__ = false
+    const __forceYT = (typeof window !== "undefined") ? (window.__NEXORA_FORCE_YT_CANVA_V1__ !== false) : true;
+    if(__forceYT){
+      return { ...base, name: "YT Canva V1", layout: "ytCanvaV1" };
+    }
     const raw = (prompt||"").trim();
     const cleaned = raw
       .replace(/^[\s\-–—:]+/g,"")
@@ -513,7 +509,51 @@
     const photoSrcA = smartPhotoSrc((s^hash("A"))>>>0, pal, photoLabel);
     const photoSrcB = smartPhotoSrc((s^hash("B"))>>>0, pal, (tHeadline.split(" ")[0]||photoLabel));
 
-    if(layout==="posterHero"){
+    if(layout==="ytCanvaV1"){
+  // 16:9 YouTube Thumbnail — Canva-style: bold headline, hero media, badge + CTA, strong contrast.
+  const pad = M;
+  const rightX = Math.round(w*0.56);
+  const rightW = Math.round(w*0.40);
+  const rightY = Math.round(h*0.08);
+  const rightH = Math.round(h*0.84);
+
+  // Back glow behind hero
+  add({ type:"shape", x:Math.round(w*0.48), y:Math.round(-h*0.10), w:Math.round(w*0.70), h:Math.round(h*1.20), r:140,
+        fill:`radial-gradient(circle at 30% 30%, ${pal.accent2}55, transparent 60%)`, opacity:1 });
+
+  // Glass panel for text (ensures readability over any bg)
+  add({ type:"card", x:pad, y:pad, w:Math.round(w*0.48), h:Math.round(h*0.74), r:46,
+        fill: glass ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.22)",
+        stroke:"rgba(255,255,255,0.18)" });
+
+  // Hero media card (right)
+  add({ type:"shape", x:rightX-14, y:rightY+12, w:rightW+22, h:rightH+12, r:54, fill:"rgba(0,0,0,0.22)", opacity:1 });
+  add({ type:"photo", src: photoSrcA, x:rightX, y:rightY, w:rightW, h:rightH, r:52, stroke:"rgba(255,255,255,0.20)" });
+
+  // Badge (top-left)
+  add({ type:"badge", x:pad+22, y:pad+22, w:Math.round(w*0.22), h:Math.round(h*0.10), r:999,
+        fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020", tsize:Math.round(h*0.040), tweight:900 });
+
+  // Headline
+  add({ type:"text", x:pad+22, y:Math.round(h*0.20), text:tHeadline.toUpperCase(), size:Math.round(h*0.120), weight:950, color: pal.ink, letter:-1.2 });
+
+  // Subhead
+  add({ type:"text", x:pad+22, y:Math.round(h*0.44), text:tSub, size:Math.round(h*0.050), weight:700, color:"rgba(255,255,255,0.88)" });
+
+  // CTA pill
+  add({ type:"pill", x:pad+22, y:Math.round(h*0.62), w:Math.round(w*0.28), h:Math.round(h*0.11), r:999,
+        fill: pal.accent, text:tCTA, tcolor:"#071423", tsize:Math.round(h*0.045), tweight:900 });
+
+  // Small brand tag
+  add({ type:"chip", x:pad+26, y:Math.round(h*0.74), text:(brand||"Nexora").toUpperCase(), size:Math.round(h*0.034), color:"rgba(255,255,255,0.70)" });
+
+  // Decorative dots
+  add({ type:"dots", x:Math.round(w*0.44), y:Math.round(h*0.10), w:Math.round(w*0.10), h:Math.round(h*0.12), fill:"rgba(255,255,255,0.18)" });
+
+  return elements;
+}
+
+if(layout==="posterHero"){
       // Full-bleed hero photo with gradient overlay + strong typography.
       add({ type:"photo", src: photoSrcA, x:0,y:0,w,h, r:0, opacity:1 });
       add({ type:"shape", x:0,y:0,w,h, r:0, fill:"linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.60))", opacity:1 });
