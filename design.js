@@ -415,11 +415,7 @@
     } else if(t==="promo"){
       pal.accent = pal.accent2 || pal.accent;
     }
-    if(category?.toLowerCase().includes("youtube")){
-  pal.bg="#000000"; pal.bg2="#0f0f0f"; pal.ink="#ffffff";
-  pal.accent="#facc15"; pal.accent2="#ef4444";
-}
-return pal;
+    return pal;
   }
 
   function pickCTA(intent, seed){
