@@ -133,67 +133,40 @@
       cm.features = [];
     }
 
-    // YouTube Thumbnail: Option A (Aggressive) — punchy, prompt-aware, readable.
-  if(cat.toLowerCase().includes("youtube") || cat.toLowerCase().includes("yt")){
-    const raw = String(prompt||"").trim();
+  // YouTube Thumbnail: stronger hooky copy defaults (Phase 6A / YT-1)
+  if(cat.includes("youtube") || cat.includes("yt")){
+    // Phase YT-L1: hard-coded Canva-level YouTube thumbnail layout (single layout, strong hierarchy).
+    // You can disable later by setting: window.__NEXORA_FORCE_YT_CANVA_V1__ = false
+    const __forceYT = (typeof window !== "undefined") ? (window.__NEXORA_FORCE_YT_CANVA_V1__ !== false) : true;
+    if(__forceYT){
+      return { ...base, name: "YT Brutal V1", layout: "ytBrutalV1" };
+    }
+    const raw = (prompt||"").trim();
     const cleaned = raw
       .replace(/^[\s\-–—:]+/g,"")
-      .replace(/\?+$/g,"")
+      .replace(/^(why|how|what|when|where|the truth about|truth about)\s+/i,"")
+      .replace(/\?+$/,"")
       .trim();
 
-    const stop = new Set([
-      "the","a","an","and","or","to","for","of","in","on","at","with","from","by","about","this","that","these","those",
-      "how","why","what","when","where","best","top","new","latest","ultimate","guide","review"
-    ]);
+    let head = cleaned || "WATCH THIS";
+    const words = head.split(/\s+/).filter(Boolean);
+    if(words.length > 7) head = words.slice(0,7).join(" ");
+    if(head.length > 34) head = head.slice(0,34).trim();
 
-    const words2 = cleaned
-      .replace(/[^\w\s%$-]/g," ")
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(w=>w.toLowerCase())
-      .filter(w=>!stop.has(w));
+    const hooks = ["SHOCKING", "TRUTH", "SECRET", "MISTAKES", "WARNING", "REAL REASON"];
+    const micro = ["WATCH NOW", "DON'T MISS", "FULL STORY", "NEW VIDEO", "IN 5 MINUTES"];
+    const badge = ["NEW", "2025", "TOP 5", "BREAKDOWN", "EXPOSED", "HOW TO"];
 
-    const topic = (intent && intent.topic) ? String(intent.topic) : "generic";
-    const core = (words2.slice(0,2).join(" ") || "this").toUpperCase();
-
-    // Headline patterns (2-line, MrBeast-ish)
-    const patterns = [
-      ()=>({a:"BEST", b:core}),
-      ()=>({a:"TOP 5", b:core}),
-      ()=>({a:core, b:"YOU NEED"}),
-      ()=>({a:"SECRET", b:core}),
-      ()=>({a:"DON'T BUY", b:core})
-    ];
-    const pat = patterns[(s % patterns.length)]();
-    let head = (pat.a + "\n" + pat.b).trim();
-
-    // Safety clamp (avoid absurd length)
-    const lines = head.split("\n").map(x=>x.trim()).filter(Boolean);
-    const l1 = (lines[0]||"WATCH").slice(0,14);
-    const l2 = (lines[1]||"THIS").slice(0,16);
-    head = (l1 + "\n" + l2).toUpperCase();
-
-    const badgesByTopic = {
-      beauty:  ["TRENDING","GLOW UP","NEW"],
-      sports:  ["PRO","MUST HAVE","TOP"],
-      tech:    ["HOT","NEW","HACK"],
-      gaming:  ["OP","NEW","INSANE"],
-      finance: ["PROFIT","REAL","TOP"],
-      food:    ["EASY","NEW","FAST"],
-      travel:  ["NEW","HIDDEN","BEST"]
-    };
-    const kicker = ["WATCH THIS","REAL TALK","SHOCKING","THE TRUTH","DON'T MISS","STOP THIS"];
-    const micro = ["FULL GUIDE","WATCH NOW","IN 5 MIN","REAL RESULTS","DO THIS"];
-
-    cm.badge = pick((badgesByTopic[topic] || ["NEW","TOP","HOT"]), s ^ 0x5151);
-    cm.kicker = pick(kicker, s ^ 0x6161);
-    cm.headline = head;
-    cm.subhead = pick(micro, s ^ 0x7171);
+    cm.badge = pick(badge, seed ^ 0x5151);
+    cm.kicker = pick(hooks, seed ^ 0x6161);
+    cm.headline = (head).toUpperCase();
+    cm.subhead = pick(micro, seed ^ 0x7171);
     cm.cta = "WATCH";
+    cm.body = "";
     cm.features = [];
   }
 
-return cm;
+  return cm;
   }
 
   function titleish(text, maxLen){
@@ -273,24 +246,8 @@ return cm;
       type: "generic",
       energy: "medium",   // low|medium|high
       density: "balanced",// text|balanced|visual
-      ctaMode: "generic", // hiring|promo|info|brand|generic
-      topic: "generic"
+      ctaMode: "generic"  // hiring|promo|info|brand|generic
     };
-
-    // Topic detection (used for prompt-aware accents/headlines, esp. YouTube thumbnails)
-    const topicMap = [
-      { topic:"beauty", keys:["beauty","makeup","skincare","cosmetic","cosmetics","hair","salon"] },
-      { topic:"sports", keys:["sports","gym","fitness","workout","football","cricket","soccer","training"] },
-      { topic:"tech", keys:["tech","gadget","gadgets","ai","software","hardware","laptop","phone","camera","review"] },
-      { topic:"gaming", keys:["game","gaming","ps5","xbox","steam","fortnite","valorant","pubg","gta"] },
-      { topic:"finance", keys:["finance","money","invest","investing","crypto","bitcoin","stock","trading","salary","profit"] },
-      { topic:"food", keys:["food","recipe","cook","cooking","kitchen","coffee","restaurant"] },
-      { topic:"travel", keys:["travel","trip","vacation","tour","airport","flight","hotel"] }
-    ];
-    for(const row of topicMap){
-      if(row.keys.some(k=>p.includes(k))){ intent.topic = row.topic; break; }
-    }
-
 
     if(has(["hiring","we are hiring","job","jobs","vacancy","vacancies","career","careers","apply","join our team","recruit"])){
       intent.type="hiring"; intent.energy="medium"; intent.density="text"; intent.ctaMode="hiring";
@@ -353,8 +310,9 @@ return cm;
   }
 
   if(cat.includes("youtube") || cat.includes("yt")){
-    // Single locked layout for now (Option A): ytBrutalV1
-    return { ...base, name: "YT Brutal V1", layout: "ytBrutalV1" };
+    // Phase: single locked YouTube Thumbnail layout (requested): Canva-style baseline.
+    // This guarantees ONE visible, high-contrast thumbnail every time.
+    return { ...base, name: "YouTube Thumbnail", layout: "ytCanvaV1" };
   }
 
   // Non-YouTube: keep existing behavior (small type-based bias only).
@@ -457,26 +415,6 @@ return cm;
     } else if(t==="promo"){
       pal.accent = pal.accent2 || pal.accent;
     }
-    
-    // YouTube prompt-aware accent override (topic -> accent colors)
-    const c = String(intent?.category || "").toLowerCase();
-    if(c.includes("youtube") || c.includes("yt")){
-      const topic = String(intent?.topic || "generic");
-      const m = {
-        beauty:  { a:"#ec4899", b:"#a855f7" },
-        sports:  { a:"#ef4444", b:"#f97316" },
-        tech:    { a:"#22d3ee", b:"#3b82f6" },
-        gaming:  { a:"#a78bfa", b:"#22c55e" },
-        finance: { a:"#22c55e", b:"#84cc16" },
-        food:    { a:"#f59e0b", b:"#fb7185" },
-        travel:  { a:"#38bdf8", b:"#34d399" }
-      };
-      if(m[topic]){
-        pal.accent = m[topic].a;
-        pal.accent2 = m[topic].b;
-      }
-    }
-
     return pal;
   }
 
@@ -564,12 +502,6 @@ return cm;
 
   add({ type:"shape", x:0, y:0, w:leftW, h:h, r:0, fill:"rgba(0,0,0,0.62)", opacity:1 });
   add({ type:"photo", src: photoSrcA, x:heroX, y:heroY, w:heroW, h:heroH, r:0, stroke:"rgba(255,255,255,0.08)" });
-  // Accent stripe + readability overlay
-  add({ type:"shape", x:0, y:0, w:Math.round(w*0.018), h:h, r:0, fill: pal.accent, opacity:1 });
-  add({ type:"shape", x:heroX, y:heroY, w:heroW, h:heroH, r:0, fill:"linear-gradient(90deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.20) 55%, rgba(0,0,0,0) 82%)", opacity:1 });
-  add({ type:"shape", x:Math.round(w*0.18), y:Math.round(h*0.52), w:Math.round(w*0.34), h:Math.round(h*0.10), r:18,
-        fill:`linear-gradient(90deg, ${pal.accent2}cc, transparent)`, opacity:1 });
-
 
   add({ type:"badge", x:pad, y:pad, w:Math.round(w*0.24), h:Math.round(h*0.11), r:999,
         fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020",
@@ -809,7 +741,7 @@ if(layout==="posterHero"){
       }
     }catch(_){ spineDoc = null; }
 
-    const arch = archetypeWithIntent(seed, intent);
+    const arch = archetypeWithIntent(intent, seed);
 
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
