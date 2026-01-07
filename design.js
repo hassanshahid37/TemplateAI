@@ -310,28 +310,9 @@
   }
 
   if(cat.includes("youtube") || cat.includes("yt")){
-    const yt = {
-      generic:  { splitHero: 0.30, photoCard: 0.25, posterHero: 0.20, featureGrid: 0.15, badgePromo: 0.10 },
-      tutorial: { splitHero: 0.35, photoCard: 0.25, featureGrid: 0.20, posterHero: 0.10, badgePromo: 0.10 },
-      listicle: { featureGrid: 0.35, splitHero: 0.25, posterHero: 0.15, badgePromo: 0.15, photoCard: 0.10 },
-      promo:    { badgePromo: 0.40, splitHero: 0.25, posterHero: 0.20, photoCard: 0.15, featureGrid: 0.00 },
-      offer:    { badgePromo: 0.40, splitHero: 0.25, posterHero: 0.20, photoCard: 0.15, featureGrid: 0.00 },
-      quote:    { posterHero: 0.35, minimalQuote: 0.25, splitHero: 0.20, photoCard: 0.20, featureGrid: 0.00 }
-    };
-
-    const weights = yt[type] || yt.generic;
-    const layout = pickLayout(weights);
-
-    const nameByLayout = {
-      splitHero: "YouTube Face",
-      photoCard: "YouTube Photo",
-      featureGrid: "YouTube List",
-      badgePromo: "YouTube Badge",
-      posterHero: "YouTube Bold",
-      minimalQuote: "YouTube Quote"
-    };
-
-    return { ...base, name: nameByLayout[layout] || "YouTube", layout };
+    // Phase: single locked YouTube Thumbnail layout (requested): Canva-style baseline.
+    // This guarantees ONE visible, high-contrast thumbnail every time.
+    return { ...base, name: "YouTube Thumbnail", layout: "ytCanvaV1" };
   }
 
   // Non-YouTube: keep existing behavior (small type-based bias only).
@@ -760,33 +741,7 @@ if(layout==="posterHero"){
       }
     }catch(_){ spineDoc = null; }
 
-    const arch = archetypeWithIntent(seed, intent);
-    // P5 Focus: ONE perfect YouTube Thumbnail layout (Canva-level baseline).
-    // Index generates; Editor only edits. Keep deterministic & single-layout for now.
-    if(String(category) === "YouTube Thumbnail"){
-      arch.layout = "ytCanvaV1";
-      arch.name = "YouTube Canva V1";
-
-      // Strong, readable headline from prompt
-      const raw = String(prompt || "").trim();
-      const base = raw.length ? raw : String(cm.headline || "BIG TITLE");
-      const up = base.replace(/[_\-]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
-
-      // Simple 2-line wrap (approx). Keep very readable at thumbnail size.
-      const words = up.split(" ").filter(Boolean);
-      let line1="", line2="";
-      for(const w of words){
-        if((line1 ? (line1+" "+w) : w).length <= 16) line1 = (line1 ? (line1+" "+w) : w);
-        else if((line2 ? (line2+" "+w) : w).length <= 18) line2 = (line2 ? (line2+" "+w) : w);
-      }
-      cm.headline = (line1 + (line2 ? "\n"+line2 : "")).trim();
-
-      // Keep layout clean and brutal-readable
-      cm.subhead = "";
-      cm.kicker = "";
-      cm.badge = String(cm.badge || "NEW").toUpperCase();
-      cm.cta = String(cm.cta || "WATCH NOW").toUpperCase();
-    }
+    const arch = archetypeWithIntent(intent, seed);
 
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
