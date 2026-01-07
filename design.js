@@ -139,7 +139,7 @@
     // You can disable later by setting: window.__NEXORA_FORCE_YT_CANVA_V1__ = false
     const __forceYT = (typeof window !== "undefined") ? (window.__NEXORA_FORCE_YT_CANVA_V1__ !== false) : true;
     if(__forceYT){
-      return { ...base, name: "YT Canva V1", layout: "ytCanvaV1" };
+      return { ...base, name: "YT Brutal V1", layout: "ytBrutalV1" };
     }
     const raw = (prompt||"").trim();
     const cleaned = raw
@@ -510,57 +510,79 @@
     const photoSrcA = smartPhotoSrc((s^hash("A"))>>>0, pal, photoLabel);
     const photoSrcB = smartPhotoSrc((s^hash("B"))>>>0, pal, (tHeadline.split(" ")[0]||photoLabel));
 
-    if(layout==="ytCanvaV1"){
-// 16:9 YouTube Thumbnail — BRUTAL V1 (single, Canva-level clickbait).
-// Hard rules: full-bleed hero, left dark slab, MASSIVE headline, badge + CTA.
-const pad = M;
-const safe = Math.round(Math.min(w,h) * 0.06);
-const leftW = Math.round(w * 0.42);
+    if(layout==="ytBrutalV1"){
+  // 16:9 YouTube Thumbnail — Brutal: no polite card, giant headline, dark slab, edge-breaking hero.
+  const pad = M;
+  const leftW = Math.round(w*0.44);
+  const heroX = Math.round(w*0.40);
+  const heroY = Math.round(-h*0.06);
+  const heroW = Math.round(w*0.70);
+  const heroH = Math.round(h*1.12);
 
-// Full background
-add({ type:"shape", x:0, y:0, w, h, r:0, fill: pal.bg });
+  add({ type:"shape", x:0, y:0, w:leftW, h:h, r:0, fill:"rgba(0,0,0,0.62)", opacity:1 });
+  add({ type:"photo", src: photoSrcA, x:heroX, y:heroY, w:heroW, h:heroH, r:0, stroke:"rgba(255,255,255,0.08)" });
 
-// Hero media (overscan so it feels edge-to-edge)
-const heroX = leftW - Math.round(w * 0.03);
-add({ type:"photo", src: photoSrcA, x:heroX, y:Math.round(-h*0.06), w:Math.round(w-heroX + w*0.06), h:Math.round(h*1.12), r:0, opacity:1 });
+  add({ type:"badge", x:pad, y:pad, w:Math.round(w*0.24), h:Math.round(h*0.11), r:999,
+        fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020",
+        tsize:Math.round(h*0.050), tweight:900 });
 
-// Left dark slab for readability
-add({ type:"shape", x:0, y:0, w:leftW, h:h, r:0, fill:"rgba(0,0,0,0.62)" });
+  add({ type:"text", x:pad, y:pad + Math.round(h*0.14), text:(spec.kicker||"WATCH NOW").toUpperCase(),
+        size:Math.round(h*0.060), weight:900, color:"rgba(255,255,255,0.95)", letter:1.0 });
 
-// Accent glow edge
-add({ type:"shape", x:leftW-18, y:0, w:36, h:h, r:0, fill:`linear-gradient(180deg, ${pal.accent}aa, ${pal.accent2}66)`, opacity:0.9 });
+  const HSIZE = clamp(Math.round(h*0.24), 150, 240);
+  const HY = pad + Math.round(h*0.24);
+  const head = (tHeadline||"WATCH THIS").toUpperCase();
 
-// Badge (top-left)
-add({ type:"badge", x:safe, y:safe, w:Math.round(leftW*0.56), h:Math.round(h*0.10), r:999,
-      fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(),
-      tcolor:"#0b1020", tsize:Math.round(h*0.042), tweight:900 });
+  add({ type:"text", x:pad+10, y:HY+10, text:head, size:HSIZE, weight:900, color:"rgba(0,0,0,0.92)", letter:-1.2 });
+  add({ type:"text", x:pad, y:HY, text:head, size:HSIZE, weight:900, color:"#ffffff", letter:-1.2 });
 
-// Kicker
-add({ type:"text", x:safe, y:safe + Math.round(h*0.13), text:(tKicker||"SHOCKING").toUpperCase(),
-      size:Math.round(h*0.050), weight:900, color:"rgba(255,255,255,0.92)", letter:0 });
+  add({ type:"pill", x:pad, y:h - pad - Math.round(h*0.13), w:Math.round(w*0.30), h:Math.round(h*0.13), r:999,
+        fill: pal.accent, text:(spec.cta||"WATCH NOW").toUpperCase(), tcolor:"#0b1020",
+        tsize:Math.round(h*0.052), tweight:900 });
 
-// Headline (fake stroke via shadow)
-const head = (tHeadline||"WATCH THIS").toUpperCase();
-const headY = safe + Math.round(h*0.22);
-const headW = leftW - safe*2;
-const headSize = Math.min(240, Math.max(150, Math.round(h*0.24)));
+  return elements;
+}
+if(layout==="ytCanvaV1"){
+  // 16:9 YouTube Thumbnail — Canva-style: bold headline, hero media, badge + CTA, strong contrast.
+  const pad = M;
+  const rightX = Math.round(w*0.56);
+  const rightW = Math.round(w*0.40);
+  const rightY = Math.round(h*0.08);
+  const rightH = Math.round(h*0.84);
 
-add({ type:"text", x:safe+10, y:headY+10, w:headW, text:head,
-      size:headSize, weight:950, color:"rgba(0,0,0,0.92)", letter:-1.6 });
+  // Back glow behind hero
+  add({ type:"shape", x:Math.round(w*0.48), y:Math.round(-h*0.10), w:Math.round(w*0.70), h:Math.round(h*1.20), r:140,
+        fill:`radial-gradient(circle at 30% 30%, ${pal.accent2}55, transparent 60%)`, opacity:1 });
 
-add({ type:"text", x:safe, y:headY, w:headW, text:head,
-      size:headSize, weight:950, color:"#ffffff", letter:-1.6 });
+  // Glass panel for text (ensures readability over any bg)
+  add({ type:"card", x:pad, y:pad, w:Math.round(w*0.48), h:Math.round(h*0.74), r:46,
+        fill: glass ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.22)",
+        stroke:"rgba(255,255,255,0.18)" });
 
-// CTA pill
-add({ type:"pill", x:safe, y:h - safe - Math.round(h*0.12),
-      w:Math.round(leftW*0.70), h:Math.round(h*0.12), r:999,
-      fill: pal.accent, text:(tCTA||"WATCH").toUpperCase(),
-      tcolor:"#071423", tsize:Math.round(h*0.046), tweight:900 });
+  // Hero media card (right)
+  add({ type:"shape", x:rightX-14, y:rightY+12, w:rightW+22, h:rightH+12, r:54, fill:"rgba(0,0,0,0.22)", opacity:1 });
+  add({ type:"photo", src: photoSrcA, x:rightX, y:rightY, w:rightW, h:rightH, r:52, stroke:"rgba(255,255,255,0.20)" });
 
-// Brand tag
-add({ type:"chip", x:safe, y:h - safe - Math.round(h*0.12) - Math.round(h*0.07),
-      text:(brandName||"NEXORA").toUpperCase(), size:Math.round(h*0.034),
-      color:"rgba(255,255,255,0.70)" });
+  // Badge (top-left)
+  add({ type:"badge", x:pad+22, y:pad+22, w:Math.round(w*0.22), h:Math.round(h*0.10), r:999,
+        fill: pal.accent2, text:(spec.badge||tKicker||"NEW").toUpperCase(), tcolor:"#0b1020", tsize:Math.round(h*0.040), tweight:900 });
+
+  // Headline
+  add({ type:"text", x:pad+22, y:Math.round(h*0.20), text:tHeadline.toUpperCase(), size:Math.round(h*0.120), weight:950, color: pal.ink, letter:-1.2 });
+
+  // Subhead
+  add({ type:"text", x:pad+22, y:Math.round(h*0.44), text:tSub, size:Math.round(h*0.050), weight:700, color:"rgba(255,255,255,0.88)" });
+
+  // CTA pill
+  add({ type:"pill", x:pad+22, y:Math.round(h*0.62), w:Math.round(w*0.28), h:Math.round(h*0.11), r:999,
+        fill: pal.accent, text:tCTA, tcolor:"#071423", tsize:Math.round(h*0.045), tweight:900 });
+
+  // Small brand tag
+  add({ type:"chip", x:pad+26, y:Math.round(h*0.74), text:(brand||"Nexora").toUpperCase(), size:Math.round(h*0.034), color:"rgba(255,255,255,0.70)" });
+
+  // Decorative dots
+  add({ type:"dots", x:Math.round(w*0.44), y:Math.round(h*0.10), w:Math.round(w*0.10), h:Math.round(h*0.12), fill:"rgba(255,255,255,0.18)" });
+
   return elements;
 }
 
@@ -739,6 +761,32 @@ if(layout==="posterHero"){
     }catch(_){ spineDoc = null; }
 
     const arch = archetypeWithIntent(seed, intent);
+    // P5 Focus: ONE perfect YouTube Thumbnail layout (Canva-level baseline).
+    // Index generates; Editor only edits. Keep deterministic & single-layout for now.
+    if(String(category) === "YouTube Thumbnail"){
+      arch.layout = "ytCanvaV1";
+      arch.name = "YouTube Canva V1";
+
+      // Strong, readable headline from prompt
+      const raw = String(prompt || "").trim();
+      const base = raw.length ? raw : String(cm.headline || "BIG TITLE");
+      const up = base.replace(/[_\-]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
+
+      // Simple 2-line wrap (approx). Keep very readable at thumbnail size.
+      const words = up.split(" ").filter(Boolean);
+      let line1="", line2="";
+      for(const w of words){
+        if((line1 ? (line1+" "+w) : w).length <= 16) line1 = (line1 ? (line1+" "+w) : w);
+        else if((line2 ? (line2+" "+w) : w).length <= 18) line2 = (line2 ? (line2+" "+w) : w);
+      }
+      cm.headline = (line1 + (line2 ? "\n"+line2 : "")).trim();
+
+      // Keep layout clean and brutal-readable
+      cm.subhead = "";
+      cm.kicker = "";
+      cm.badge = String(cm.badge || "NEW").toUpperCase();
+      cm.cta = String(cm.cta || "WATCH NOW").toUpperCase();
+    }
 
     const titleByCategory = {
       "Instagram Post": "Instagram Post #"+(idx+1),
@@ -847,8 +895,7 @@ if(layout==="posterHero"){
     const category = opts?.category || "Instagram Post";
     const prompt = opts?.prompt || "";
     const style = opts?.style || "Dark Premium";
-    let count = clamp(parseInt(opts?.count ?? 24,10) || 24, 1, 200);
-    if(category === "YouTube Thumbnail") count = 1; // ONE perfect template for now
+    const count = clamp(parseInt(opts?.count ?? 24,10) || 24, 1, 200);
     const out=[];
     for(let i=0;i<count;i++) out.push(generateOne(category, prompt, style, i));
     return out;
