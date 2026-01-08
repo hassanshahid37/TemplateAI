@@ -415,14 +415,7 @@
     } else if(t==="promo"){
       pal.accent = pal.accent2 || pal.accent;
     }
-    if(category && category.toLowerCase().includes("youtube")){
-  pal.bg = "#000000";
-  pal.bg2 = "#0f0f0f";
-  pal.ink = "#ffffff";
-  pal.accent = "#facc15";
-  pal.accent2 = "#ef4444";
-}
-return pal;
+    return pal;
   }
 
   function pickCTA(intent, seed){
@@ -1164,20 +1157,3 @@ function applyIntentScene(template, intent) {
     };
   }
 })();
-
-
-
-/* === YouTube AUTO helpers (spine-safe, deterministic) === */
-function ytAutoHero(prompt=""){
-  const p = prompt.toLowerCase();
-  const faceKeys = [" i ", " my ", " we ", "reaction", "react", "shocked", "experience", "review", "face", "human", "people", "tried"];
-  for(const k of faceKeys){ if(p.includes(k)) return "face"; }
-  return "product";
-}
-function ytHeadline(prompt=""){
-  const cleaned = prompt.replace(/^(why|how|what|the truth about)/i,"").trim();
-  const words = cleaned.toUpperCase().split(/\s+/).filter(Boolean);
-  if(words.length <= 2) return "BEST\n" + words.join(" ");
-  return "BEST\n" + words.slice(0,2).join(" ");
-}
-/* === end helpers === */
