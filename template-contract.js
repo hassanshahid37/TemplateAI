@@ -1,3 +1,4 @@
+
 /* template-contract.js — Nexora TemplateContract v1 (System Spine)
    Purpose: Shared contract builder + validator for templates.
    - Works in plain <script> environments (no bundler).
