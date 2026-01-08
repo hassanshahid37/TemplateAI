@@ -1,3 +1,4 @@
+
 // spine-core.js
 // Nexora Spine Core (S0–S7) — deterministic, extension-friendly.
 // Works in both Browser (window.NexoraSpine) and Node (module.exports).
