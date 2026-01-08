@@ -1059,15 +1059,16 @@ currentStyle = "Dark Premium";
 
     try {
       // Instant client-side templates (design.js) — never blocks UI.
-      seedTemplates(payload.category === "YouTube Thumbnail" ? 1 : payload.count);
+      // Use the requested count for ALL categories (YouTube included)
+      seedTemplates(payload.count);
       try{ saveHomeState(); }catch(_){ }
-      statusEl.textContent = `Generated ${payload.category === "YouTube Thumbnail" ? 1 : payload.count}`;
+      statusEl.textContent = `Generated ${payload.count}`;
 
       // Optional backend copy enrichment (fire-and-forget). Never blocks and never throws.
       fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, count: (payload.category === "YouTube Thumbnail" ? 1 : payload.count), mode: "copy" })
+        body: JSON.stringify({ ...payload, count: payload.count, mode: "copy" })
       }).then(res => {
         if(!res || !res.ok) return null;
         return res.json().catch(() => null);
@@ -1099,7 +1100,7 @@ currentStyle = "Dark Premium";
 
 } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
-      seedTemplates(payload.category === "YouTube Thumbnail" ? 1 : payload.count);
+      seedTemplates(payload.count);
     }
   });
 });
