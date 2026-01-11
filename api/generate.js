@@ -1,7 +1,22 @@
 
 // api/generate.js
 // Nexora / Templify – Serverless API: /api/generate
-const { applyStyle } = require('../style-engine.js');
+// Style engine is optional at runtime (dev/prod paths differ). If it can't be
+// loaded, we fall back to a no-op so generation never crashes.
+let applyStyle = () => ({});
+try {
+  // Vercel serverless: this file lives in /api so style-engine is one level up.
+  // eslint-disable-next-line global-require
+  applyStyle = require('../style-engine.js').applyStyle || applyStyle;
+} catch (_) {
+  try {
+    // Local/dev or different repo structure.
+    // eslint-disable-next-line global-require
+    applyStyle = require('./style-engine.js').applyStyle || applyStyle;
+  } catch (_) {
+    // leave no-op
+  }
+}
 // Purpose: ALWAYS return REAL templates (canvas + elements) compatible with index.html preview.
 // Notes:
 // - CommonJS handler for Vercel/Netlify-style /api directory.
@@ -51,14 +66,14 @@ module.exports = async function handler(req, res) {
         category: "Instagram Post",
         style: "Dark Premium",
         count: 4,
-        divergenceIndex: -1,
-      });
+        divergenceIndex: -1
+});
       return res.end(
         JSON.stringify({
           success: true,
           templates,
-          error: String(err && err.message ? err.message : err),
-        })
+          error: String(err && err.message ? err.message : err)
+})
       );
     } catch {
       return res.end(JSON.stringify({ success: true, templates: [] }));
@@ -81,7 +96,7 @@ const CATEGORIES = {
   Logo: { w: 1000, h: 1000 },
   "Presentation Slide": { w: 1920, h: 1080 },
   Resume: { w: 1240, h: 1754 },
-  Poster: { w: 1414, h: 2000 },
+  Poster: { w: 1414, h: 2000 }
 };
 
 const PALETTES = [
@@ -92,8 +107,8 @@ const PALETTES = [
     ink: "#f7f9ff",
     muted: "#b9c3d6",
     accent: "#2f7bff",
-    accent2: "#9b5cff",
-  },
+    accent2: "#9b5cff"
+},
   {
     name: "Emerald Studio",
     bg: "#071613",
@@ -101,8 +116,8 @@ const PALETTES = [
     ink: "#f4fffb",
     muted: "#b9d7cc",
     accent: "#2dd4bf",
-    accent2: "#84cc16",
-  },
+    accent2: "#84cc16"
+},
   {
     name: "Sunset Premium",
     bg: "#140a12",
@@ -110,8 +125,8 @@ const PALETTES = [
     ink: "#fff6fb",
     muted: "#f3cfe0",
     accent: "#fb7185",
-    accent2: "#f59e0b",
-  },
+    accent2: "#f59e0b"
+},
   {
     name: "Mono Luxe",
     bg: "#0b0c10",
@@ -119,8 +134,8 @@ const PALETTES = [
     ink: "#f6f7fb",
     muted: "#b4bbcb",
     accent: "#e5e7eb",
-    accent2: "#60a5fa",
-  },
+    accent2: "#60a5fa"
+},
 ];
 
 function clamp(n, a, b) {
@@ -261,8 +276,8 @@ function pickCTA(vibe, seed) {
     Branding: ["Learn More", "Discover", "Explore", "Get Started"],
     Urgency: ["Shop Now", "Limited Offer", "Buy Now", "Get 30% Off"],
     Info: ["See Details", "Learn More", "Read More", "Get Info"],
-    CTA: ["Get Started", "Join Now", "Try Now", "Sign Up"],
-  };
+    CTA: ["Get Started", "Join Now", "Try Now", "Sign Up"]
+};
   const list = choices[vibe] || choices.CTA;
   return pick(list, seed);
 }
@@ -302,8 +317,8 @@ function buildElements(layout, spec) {
       h: Math.round(h * 0.56),
       r: 44,
       fill: "rgba(255,255,255,0.06)",
-      stroke: "rgba(255,255,255,0.14)",
-    });
+      stroke: "rgba(255,255,255,0.14)"
+});
 
     add({ type: "text", x: pad, y: pad, text: brand.toUpperCase(), size: clamp(Math.round(H2 * 0.9), 18, 44), weight: 800, color: pal.muted, letter: 2 });
     add({ type: "text", x: pad, y: pad + Math.round(H2 * 1.3), text: headline, size: H1, weight: 900, color: pal.ink, letter: -0.5 });
@@ -320,8 +335,8 @@ function buildElements(layout, spec) {
       text: cta,
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 36),
-      tweight: 800,
-    });
+      tweight: 800
+});
 
     add({
       type: "photo",
@@ -331,8 +346,8 @@ function buildElements(layout, spec) {
       w: Math.round(w * 0.32),
       h: Math.round(h * 0.40),
       r: 36,
-      stroke: "rgba(255,255,255,0.18)",
-    });
+      stroke: "rgba(255,255,255,0.18)"
+});
   }
 
   if (layout === "badgePromo") {
@@ -344,8 +359,8 @@ function buildElements(layout, spec) {
       h: Math.round(h * 0.64),
       r: 52,
       fill: "rgba(255,255,255,0.06)",
-      stroke: "rgba(255,255,255,0.14)",
-    });
+      stroke: "rgba(255,255,255,0.14)"
+});
     add({
       type: "badge",
       x: w - pad - Math.round(w * 0.18),
@@ -357,8 +372,8 @@ function buildElements(layout, spec) {
       text: "SALE",
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 40),
-      tweight: 900,
-    });
+      tweight: 900
+});
 
     add({ type: "text", x: pad + 8, y: pad + 14, text: headline, size: clamp(Math.round(H1 * 1.05), 44, 128), weight: 900, color: pal.ink });
     add({ type: "text", x: pad + 10, y: pad + Math.round(h * 0.20), text: subhead, size: H2, weight: 650, color: pal.muted });
@@ -372,8 +387,8 @@ function buildElements(layout, spec) {
       w: Math.round(w * 0.52),
       h: Math.round(h * 0.22),
       r: 26,
-      stroke: "rgba(255,255,255,0.14)",
-    });
+      stroke: "rgba(255,255,255,0.14)"
+});
 
     add({
       type: "pill",
@@ -386,8 +401,8 @@ function buildElements(layout, spec) {
       text: cta,
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 36),
-      tweight: 900,
-    });
+      tweight: 900
+});
     add({ type: "chip", x: pad + Math.round(w * 0.42), y: h - pad - Math.round(H2 * 1.7), text: brand, size: clamp(Math.round(H2 * 0.85), 12, 30), color: pal.muted });
   }
 
@@ -406,8 +421,8 @@ function buildElements(layout, spec) {
       text: cta,
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 36),
-      tweight: 800,
-    });
+      tweight: 800
+});
     add({ type: "chip", x: w - pad - Math.round(w * 0.22), y: h - pad - Math.round(H2 * 1.6), text: brand, size: clamp(Math.round(H2 * 0.8), 12, 30), color: pal.muted });
   }
 
@@ -435,8 +450,8 @@ function buildElements(layout, spec) {
       text: cta,
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 36),
-      tweight: 900,
-    });
+      tweight: 900
+});
     add({ type: "photo", src: smartPhotoSrc(seed + 77, pal, brand), x: Math.round(w * 0.62), y: h - pad - Math.round(h * 0.30), w: Math.round(w * 0.30), h: Math.round(h * 0.24), r: 24, stroke: "rgba(255,255,255,0.14)" });
   }
 
@@ -450,8 +465,8 @@ function buildElements(layout, spec) {
       h: h - Math.round(h * 0.62) - pad + 8,
       r: 46,
       fill: pal.__glass ? "rgba(15,18,32,0.55)" : "rgba(0,0,0,0.38)",
-      stroke: "rgba(255,255,255,0.12)",
-    });
+      stroke: "rgba(255,255,255,0.12)"
+});
     add({ type: "text", x: pad + 18, y: Math.round(h * 0.66), text: headline, size: clamp(Math.round(H1 * 0.92), 38, 110), weight: 900, color: pal.ink });
     add({ type: "text", x: pad + 18, y: Math.round(h * 0.66) + Math.round(H1 * 1.05), text: subhead, size: H2, weight: 650, color: pal.muted });
     add({
@@ -465,8 +480,8 @@ function buildElements(layout, spec) {
       text: cta,
       tcolor: "#0b1020",
       tsize: clamp(Math.round(H2 * 0.95), 14, 36),
-      tweight: 900,
-    });
+      tweight: 900
+});
   }
 
   return els;
@@ -487,16 +502,16 @@ function materializeTemplate({ prompt, category, style, i, vibe, layoutHint, hea
     subhead,
     cta,
     brand,
-    seed: baseSeed,
-  });
+    seed: baseSeed
+});
 
   return {
     canvas: { w: size.w, h: size.h },
     elements,
     _layout: layout,
     _palette: pal,
-    _seed: baseSeed,
-  };
+    _seed: baseSeed
+};
 }
 
 
@@ -667,11 +682,7 @@ function blocksToElements(blocks, canvas, pal, seed, labelText) {
         letterSpacing: Number(b?.style?.letterSpacing ?? 0),
         opacity: Number(b?.style?.opacity ?? 1),
         shadow: b?.style?.shadow || null
-      ,
-        style: applyStyle({
-          category: "YouTube Thumbnail",
-          archetype: role && role.toUpperCase ? role.toUpperCase() : undefined,
-          elementType: "headline"
+      
         })
       });
       continue;
@@ -759,8 +770,8 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       layoutHint: a.layoutHint,
       headline,
       subhead,
-      cta,
-    });
+      cta
+});
 
     // Attach semantic roles + stable-ish ids (non-breaking)
     const elements = Array.isArray(composed.elements) ? composed.elements.map((e) => ({ ...e })) : [];
@@ -806,8 +817,8 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
     // TemplateContract (pure JSON)
     const canvasN = {
       width: Math.round(Number(composed && composed.canvas ? composed.canvas.w : 0)),
-      height: Math.round(Number(composed && composed.canvas ? composed.canvas.h : 0)),
-    };
+      height: Math.round(Number(composed && composed.canvas ? composed.canvas.h : 0))
+};
     const templateId = `tpl_${seed.toString(16)}_${i + 1}`;
     const pal = composed && composed._palette ? composed._palette : null;
     const contract = {
@@ -818,8 +829,8 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       palette: pal ? { bg: pal.bg || null, accent: pal.accent || pal.accent2 || null, ink: pal.ink || null } : null,
       layers: elements.map((e) => ({ id: String(e.id || "layer"), role: String(e.role || "badge"), locked: true })),
       exportProfiles: [String(category).replace(/\s+/g, "_").toLowerCase()],
-      createdAt: Date.now(),
-    };
+      createdAt: Date.now()
+};
 
     templates.push({
       id: templateId,
@@ -837,8 +848,8 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       elements,
       _layout: composed._layout,
       _palette: composed._palette && composed._palette.name ? composed._palette.name : null,
-      _seed: composed._seed,
-    });
+      _seed: composed._seed
+});
   }
   return templates;
 }
@@ -2247,6 +2258,6 @@ function estimateLines(text, widthPx, fontSizePx, letterSpacing) {
     buildAllArchetypes,
     resolveCanvas,
     selectArchetype,
-    nextArchetype,
-  };
+    nextArchetype
+};
 })();
