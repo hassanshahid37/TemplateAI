@@ -555,32 +555,49 @@
     };
 
     const mkText = (e) => {
-      const d = document.createElement("div");
-      place(d, e);
-      d.style.display = "flex";
-      d.style.alignItems = e.alignY || "flex-start";
-      d.style.justifyContent = e.alignX || "flex-start";
-      d.style.padding = "0";
-      d.style.whiteSpace = "pre-wrap";
-      d.style.overflow = "hidden";
-      d.style.lineHeight = String(e.lineHeight || 1.05);
-      d.style.letterSpacing = (e.letterSpacing != null ? e.letterSpacing : 0) + "px";
-      d.style.textTransform = e.uppercase ? "uppercase" : "none";
+  const d = document.createElement("div");
+  place(d, e);
 
-      const fontSize = toNum(e.size, 22) * Math.min(sx, sy);
-      d.style.fontSize = Math.max(10, fontSize) + "px";
-      d.style.fontWeight = String(e.weight || 800);
-      d.style.fontFamily = e.font || "system-ui, -apple-system, Segoe UI, Inter, Arial, sans-serif";
-      d.style.color = e.color || "#fff";
-      if(e.shadow){
-        d.style.textShadow = e.shadow;
-      }else if(e.stroke){
-        // quick faux stroke
-        d.style.textShadow = `0 0 2px ${e.stroke}, 0 0 6px ${e.stroke}`;
-      }
-      d.textContent = String(e.text || "");
-      return d;
-    };
+  const s = e.style || {};
+
+  d.style.display = "flex";
+  d.style.alignItems = e.alignY || "flex-start";
+  d.style.justifyContent = e.alignX || "flex-start";
+  d.style.padding = "0";
+  d.style.whiteSpace = "pre-wrap";
+  d.style.overflow = "hidden";
+
+  const lh = (s.lineHeight != null ? s.lineHeight : (e.lineHeight || 1.05));
+  d.style.lineHeight = String(lh);
+
+  const ls = (s.letterSpacing != null ? s.letterSpacing : (e.letterSpacing != null ? e.letterSpacing : 0));
+  d.style.letterSpacing = ls + "px";
+
+  // casing priority: style-engine first, fallback to legacy uppercase flag
+  if (s.casing === "uppercase") d.style.textTransform = "uppercase";
+  else if (s.casing === "lowercase") d.style.textTransform = "lowercase";
+  else if (s.casing === "capitalize") d.style.textTransform = "capitalize";
+  else d.style.textTransform = e.uppercase ? "uppercase" : "none";
+
+  const fontSize = (s.fontSize != null ? s.fontSize : toNum(e.size, 22)) * Math.min(sx, sy);
+  d.style.fontSize = Math.max(10, fontSize) + "px";
+
+  d.style.fontWeight = String(s.fontWeight || e.weight || 800);
+  d.style.fontFamily = e.font || "system-ui, -apple-system, Segoe UI, Inter, Arial, sans-serif";
+  d.style.color = (s.color || e.color || "#fff");
+
+  // shadow priority
+  const sh = (s.shadow || e.shadow || null);
+  if (sh) {
+    d.style.textShadow = sh;
+  } else if (e.stroke) {
+    // quick faux stroke
+    d.style.textShadow = `0 0 2px ${e.stroke}, 0 0 6px ${e.stroke}`;
+  }
+
+  d.textContent = String(e.text || "");
+  return d;
+};
 
     const mkBadge = (e) => {
       const d = document.createElement("div");
@@ -666,12 +683,31 @@
 
     // Phase I: client-side "Canva-style" generator (design.js) as the primary safe fallback.
 // IMPORTANT: Keep RAW templates for correct previews + export sizing on the homepage.
-if (false) {
-  // disabled NexoraDesign.renderPreview for preview renderer Phase 1
-} else {
-          // Fallback to legacy mini renderer (convert only for drawing)
-          drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
-        }
+if(window.NexoraDesign && typeof window.NexoraDesign.generateTemplates === "function"){
+  try{
+    const rawTemplates = window.NexoraDesign.generateTemplates({ category, style, prompt, count: n });
+    const templates = Array.isArray(rawTemplates) ? rawTemplates : [];
+
+    templates.forEach((t, i) => {
+      const div = document.createElement("div");
+      div.className = "tile";
+      div.tabIndex = 0;
+
+      const title = (t.title || (category+" #"+(i+1)));
+      const desc  = (t.description || (style+" • Canva-style"));
+
+      div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
+
+      const thumb = div.querySelector(".thumb");
+      if(thumb){
+        // Prefer design.js renderer for non-YouTube. For YouTube, use drawThumb so backend archetype styles can show.
+const isYT = String(category).toLowerCase().includes("youtube");
+if(!isYT && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
+  window.NexoraDesign.renderPreview(t, thumb);
+}else{
+  // Use our renderer (supports element.style bridge via mkText)
+  drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
+}
       }
 
       __lastTemplates.push(t);               // RAW
@@ -922,13 +958,20 @@ function renderTemplatesFromList(list){
 
       const thumb = div.querySelector(".thumb");
       if(thumb){
-        if (false) {
-  // disabled NexoraDesign.renderPreview for preview renderer Phase 1
-} else {
-          const tpl = toEditorTemplate(t);
-          drawThumb(thumb, tpl, tpl.bg);
-        }
-      }
+    const cat = String(t.category || document.getElementById("cat")?.value || "");
+    const isYT = cat.toLowerCase().includes("youtube");
+    const hasStyle = Array.isArray(t.elements) && t.elements.some(e => e && typeof e === "object" && e.style);
+    if(isYT || hasStyle){
+      // Use our renderer so archetype/style-engine output is visible in previews.
+      const tpl = toEditorTemplate(t);
+      drawThumb(thumb, tpl, tpl.bg);
+    }else if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
+      window.NexoraDesign.renderPreview(t, thumb);
+    }else{
+      const tpl = toEditorTemplate(t);
+      drawThumb(thumb, tpl, tpl.bg);
+    }
+  }
 
       div.addEventListener("click", ()=>openEditorWith(t));
       div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
@@ -1051,35 +1094,23 @@ currentStyle = "Dark Premium";
       fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, count: payload.count, mode: "copy" })
+        body: JSON.stringify({ ...payload, count: payload.count, mode: "templates" })
       }).then(res => {
         if(!res || !res.ok) return null;
         return res.json().catch(() => null);
       }).then(data => {
-        if(!data || !Array.isArray(data.templates)) return;
-        if(Array.isArray(__lastTemplates)){
-          data.templates.forEach((ai, i) => {
-            const t = __lastTemplates[i];
-            if(!t) return;
-            if(ai?.title) t.title = String(ai.title);
-            if(ai?.description) t.description = String(ai.description);
-            if(ai?.cta) t.cta = String(ai.cta);
-          });
-        }
-        // Update labels only (thumbs stay rendered).
-        const grid = document.getElementById("previewGrid");
-        if(!grid) return;
-        const tiles = grid.querySelectorAll('.tile');
-        tiles.forEach((tile, i) => {
-          const t = __lastTemplates[i];
-          if(!t) return;
-          const b = tile.querySelector('b');
-          const s = tile.querySelector('span');
-          if(b) b.textContent = t.title || b.textContent;
-          if(s) s.textContent = t.description || s.textContent;
-        });
-        statusEl.textContent = `Generated ${__lastTemplates.length} (copy enhanced)`;
-      }).catch(() => {});
+    if(!data || !Array.isArray(data.templates) || !data.templates.length) return;
+
+    // Replace seeded templates with REAL backend templates (archetypes + style-engine).
+    __lastTemplates = data.templates;
+
+    // Re-render the grid using the same UI (template boxes remain identical).
+    renderTemplatesFromList(__lastTemplates);
+
+    try{ saveHomeState(); }catch(_){}
+
+    statusEl.textContent = `Generated ${__lastTemplates.length} (AI templates)`;
+  }).catch(() => {});
 
 } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
