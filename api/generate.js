@@ -1,6 +1,7 @@
 
 // api/generate.js
 // Nexora / Templify – Serverless API: /api/generate
+const { applyStyle } = require('../style-engine.js');
 // Purpose: ALWAYS return REAL templates (canvas + elements) compatible with index.html preview.
 // Notes:
 // - CommonJS handler for Vercel/Netlify-style /api directory.
@@ -666,6 +667,12 @@ function blocksToElements(blocks, canvas, pal, seed, labelText) {
         letterSpacing: Number(b?.style?.letterSpacing ?? 0),
         opacity: Number(b?.style?.opacity ?? 1),
         shadow: b?.style?.shadow || null
+      ,
+        style: applyStyle({
+          category: "YouTube Thumbnail",
+          archetype: role && role.toUpperCase ? role.toUpperCase() : undefined,
+          elementType: "headline"
+        })
       });
       continue;
     }
