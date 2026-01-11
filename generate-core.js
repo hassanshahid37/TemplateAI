@@ -2257,4 +2257,6 @@ function estimateLines(text, widthPx, fontSizePx, letterSpacing) {
     resolveCanvas,
     selectArchetype,
     nextArchetype
-};
+ export fucntion generateTemplates(pay)
+   return buildALLArchetypes(payload);
+}
