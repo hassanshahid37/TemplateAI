@@ -22,7 +22,7 @@ try {
 // - CommonJS handler for Vercel/Netlify-style /api directory.
 // - Deterministic (no external AI calls), never throws: always 200 JSON.
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     // Basic CORS / preflight safety
     res.statusCode = 200;
@@ -2262,3 +2262,26 @@ function estimateLines(text, widthPx, fontSizePx, letterSpacing) {
  export fucntion generateTemplates(payload)
    return core.buildALLArchetypes(payload);
 }
+
+// ---------------------------------------------------------------------------
+// Public API for reuse by wrappers (e.g., /api/generate.js thin handler) 
+// ---------------------------------------------------------------------------
+async function generateTemplates(payload) {
+  let body = payload;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch (_) {}
+  }
+  body = body || {};
+  const normalized = {
+    prompt: body.prompt || '',
+    category: body.category || 'Instagram Post',
+    style: body.style || 'Dark Premium',
+    count: Number.isFinite(Number(body.count)) ? Number(body.count) : 3,
+    divergenceIndex: Number.isFinite(Number(body.divergenceIndex)) ? Number(body.divergenceIndex) : 0,
+  };
+  return makeTemplates(normalized);
+}
+
+module.exports = handler;
+module.exports.generateTemplates = generateTemplates;
+module.exports.default = handler;
