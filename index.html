@@ -666,27 +666,9 @@
 
     // Phase I: client-side "Canva-style" generator (design.js) as the primary safe fallback.
 // IMPORTANT: Keep RAW templates for correct previews + export sizing on the homepage.
-if(window.NexoraDesign && typeof window.NexoraDesign.generateTemplates === "function"){
-  try{
-    const rawTemplates = window.NexoraDesign.generateTemplates({ category, style, prompt, count: n });
-    const templates = Array.isArray(rawTemplates) ? rawTemplates : [];
-
-    templates.forEach((t, i) => {
-      const div = document.createElement("div");
-      div.className = "tile";
-      div.tabIndex = 0;
-
-      const title = (t.title || (category+" #"+(i+1)));
-      const desc  = (t.description || (style+" • Canva-style"));
-
-      div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
-
-      const thumb = div.querySelector(".thumb");
-      if(thumb){
-        // Prefer design.js renderer for Canva-level look (true 16:9 for YouTube).
-        if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
-          window.NexoraDesign.renderPreview(t, thumb);
-        }else{
+if (false) {
+  // disabled NexoraDesign.renderPreview for preview renderer Phase 1
+} else {
           // Fallback to legacy mini renderer (convert only for drawing)
           drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
         }
@@ -761,54 +743,6 @@ if(window.NexoraDesign && typeof window.NexoraDesign.generateTemplates === "func
       grid.appendChild(div);
     }
   }
-
-  // Render a provided list of RAW templates (typically from /api/generate).
-  // This is the "real generation" path (server archetypes), not just copy-enrichment.
-  function renderTemplatesFromList(templates, payload){
-    const grid = document.getElementById("previewGrid");
-    if(!grid) return;
-
-    const category = payload?.category || $("#cat")?.value || "Instagram Post";
-    const style    = payload?.style || $("#style")?.value || "Dark Premium";
-
-    grid.innerHTML = "";
-    __lastTemplates = [];
-
-    const list = Array.isArray(templates) ? templates : [];
-    list.forEach((t, i) => {
-      const div = document.createElement("div");
-      div.className = "tile";
-      div.tabIndex = 0;
-
-      const title = (t?.title || (category + " #" + (i+1)));
-      const desc  = (t?.description || (style + " • Generated"));
-
-      div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
-
-      const thumb = div.querySelector(".thumb");
-      if(thumb){
-        try{
-          if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
-            window.NexoraDesign.renderPreview(t, thumb);
-          }else{
-            drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
-          }
-        }catch(_){
-          try{
-            thumb.innerHTML = "";
-            thumb.style.backgroundImage = "linear-gradient(135deg, rgba(11,95,255,.55), rgba(136,71,255,.45))";
-          }catch(__){}
-        }
-      }
-
-      __lastTemplates.push(t);               // RAW
-      div.addEventListener("click", ()=>openEditorWith(t)); // conversion happens in openEditorWith()
-      div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
-      grid.appendChild(div);
-    });
-  }
-
-
 
 function toEditorTemplate(tpl){
     if(!tpl) return tpl;
@@ -988,9 +922,9 @@ function renderTemplatesFromList(list){
 
       const thumb = div.querySelector(".thumb");
       if(thumb){
-        if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
-          window.NexoraDesign.renderPreview(t, thumb);
-        }else{
+        if (false) {
+  // disabled NexoraDesign.renderPreview for preview renderer Phase 1
+} else {
           const tpl = toEditorTemplate(t);
           drawThumb(thumb, tpl, tpl.bg);
         }
@@ -1107,34 +1041,45 @@ currentStyle = "Dark Premium";
     };
 
     try {
-      // Real generation path: ask the server for RAW templates (archetypes), then render them.
-      statusEl.textContent = "Generating…";
+      // Instant client-side templates (design.js) — never blocks UI.
+      // Use the requested count for ALL categories (YouTube included)
+      seedTemplates(payload.count);
+      try{ saveHomeState(); }catch(_){ }
+      statusEl.textContent = `Generated ${payload.count}`;
 
-      let serverOk = false;
-      try{
-        const res = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, count: payload.count, mode: "full" })
-        });
-
-        if(res && res.ok){
-          const data = await res.json().catch(() => null);
-          if(data && Array.isArray(data.templates) && data.templates.length){
-            renderTemplatesFromList(data.templates, payload);
-            try{ saveHomeState(); }catch(_){ }
-            statusEl.textContent = `Generated ${data.templates.length}`;
-            serverOk = true;
-          }
+      // Optional backend copy enrichment (fire-and-forget). Never blocks and never throws.
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, count: payload.count, mode: "copy" })
+      }).then(res => {
+        if(!res || !res.ok) return null;
+        return res.json().catch(() => null);
+      }).then(data => {
+        if(!data || !Array.isArray(data.templates)) return;
+        if(Array.isArray(__lastTemplates)){
+          data.templates.forEach((ai, i) => {
+            const t = __lastTemplates[i];
+            if(!t) return;
+            if(ai?.title) t.title = String(ai.title);
+            if(ai?.description) t.description = String(ai.description);
+            if(ai?.cta) t.cta = String(ai.cta);
+          });
         }
-      }catch(_){}
-
-      // Fallback: local generator (design.js). Still works offline / if API fails.
-      if(!serverOk){
-        seedTemplates(payload.count);
-        try{ saveHomeState(); }catch(_){ }
-        statusEl.textContent = `Generated ${payload.count} (local fallback)`;
-      }
+        // Update labels only (thumbs stay rendered).
+        const grid = document.getElementById("previewGrid");
+        if(!grid) return;
+        const tiles = grid.querySelectorAll('.tile');
+        tiles.forEach((tile, i) => {
+          const t = __lastTemplates[i];
+          if(!t) return;
+          const b = tile.querySelector('b');
+          const s = tile.querySelector('span');
+          if(b) b.textContent = t.title || b.textContent;
+          if(s) s.textContent = t.description || s.textContent;
+        });
+        statusEl.textContent = `Generated ${__lastTemplates.length} (copy enhanced)`;
+      }).catch(() => {});
 
 } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
