@@ -391,6 +391,9 @@
   const grid = $("#previewGrid");
   const statusEl = $("#status");
 
+  // Preview authority lock: once AI templates are committed, legacy/seed renders must never run again
+  window.__NEXORA_AI_COMMITTED__ = window.__NEXORA_AI_COMMITTED__ || false;
+
   function setTheme(next){
     document.body.setAttribute("data-theme", next);
     localStorage.setItem("templify_theme", next);
@@ -786,27 +789,12 @@
     }catch(_){}
   }
 }
-// Unified preview router (no UI changes):
-// Prefer Preview Renderer v1 when contract exists; fallback to legacy drawThumb otherwise.
-function renderThumb(thumb, tplOrElements, bg){
-  if(!thumb) return;
-  try{
-    const tpl = Array.isArray(tplOrElements)
-      ? { elements: tplOrElements, canvas: { w: 980, h: 620 } }
-      : (tplOrElements || {});
-    if(tpl && tpl.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
-      thumb.innerHTML = "";
-      window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content: tpl.content || tpl.doc?.content || {} });
-      return;
-    }
-  }catch(_){}
-  drawThumb(thumb, tplOrElements, bg);
-}
-
 
 
   function seedTemplates(n){
-    grid.innerHTML = "";
+    // Block any legacy/seed renders after AI templates are committed
+    if (window.__NEXORA_AI_COMMITTED__) return;
+grid.innerHTML = "";
     __lastTemplates = [];
     const category = $("#cat").value;
     const style = $("#style").value;
@@ -831,13 +819,23 @@ if(window.NexoraDesign && typeof window.NexoraDesign.generateTemplates === "func
 
       const thumb = div.querySelector(".thumb");
       if(thumb){
-        // Prefer design.js renderer for non-YouTube. For YouTube, use drawThumb so backend archetype styles can show.
+        // Preview Renderer v1 (contract-based) is the single authority when a contract exists
+let __nrDidRender = false;
+try{
+  if(t && t.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+    thumb.innerHTML = "";
+    __nrDidRender = (window.NexoraPreview.renderTo(thumb, { contract: t.contract, content: t.content || t.doc?.content || {}, meta: { style: t.style || null, category: t.category || category || null, palette: t.contract?.palette || null } }) === true);
+  }
+}catch(_){}
+if(!__nrDidRender){
+// Prefer design.js renderer for non-YouTube. For YouTube, use drawThumb so backend archetype styles can show.
 const isYT = String(category).toLowerCase().includes("youtube");
 if(!isYT && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
   window.NexoraDesign.renderPreview(t, thumb);
 }else{
   // Use our renderer (supports element.style bridge via mkText)
-  renderThumb(thumb, toEditorTemplate(t), (t.bg || null));
+  drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
+}
 }
       }
 
@@ -959,9 +957,6 @@ function toEditorTemplate(tpl){
       style: tpl.style || "Dark Premium",
       bg: tpl.bg || null,
       canvas: tpl.canvas || { w: W, h: H },
-      contract: tpl.contract || null,
-      content: tpl.content || null,
-      doc: tpl.doc || null,
       elements: outEls
     };
   }
@@ -1075,6 +1070,9 @@ function renderTemplatesFromList(list){
     grid.innerHTML = "";
     __lastTemplates = [];
 
+    // If restored/loaded templates include contracts, treat as committed AI templates
+    try{ if(Array.isArray(list) && list.some(t=>t && t.contract)) window.__NEXORA_AI_COMMITTED__ = true; }catch(_){ }
+
     (list||[]).forEach((t, i)=>{
       if(!t) return;
 
@@ -1092,18 +1090,27 @@ function renderTemplatesFromList(list){
 
       const thumb = div.querySelector(".thumb");
       if(thumb){
-    const cat = String(t.category || document.getElementById("cat")?.value || "");
+    // Preview Renderer v1 (contract-based) is the single authority when a contract exists
+let __nrDidRender = false;
+try{
+  if(t && t.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+    thumb.innerHTML = "";
+    __nrDidRender = (window.NexoraPreview.renderTo(thumb, { contract: t.contract, content: t.content || t.doc?.content || {}, meta: { style: t.style || null, category: t.category || null, palette: t.contract?.palette || null } }) === true);
+  }
+}catch(_){}
+if(!__nrDidRender){
+const cat = String(t.category || document.getElementById("cat")?.value || "");
     const isYT = cat.toLowerCase().includes("youtube");
     const hasStyle = Array.isArray(t.elements) && t.elements.some(e => e && typeof e === "object" && e.style);
     if(isYT || hasStyle){
       // Use our renderer so archetype/style-engine output is visible in previews.
       const tpl = toEditorTemplate(t);
-      renderThumb(thumb, tpl, tpl.bg);
+      drawThumb(thumb, tpl, tpl.bg);
     }else if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
       window.NexoraDesign.renderPreview(t, thumb);
     }else{
       const tpl = toEditorTemplate(t);
-      renderThumb(thumb, tpl, tpl.bg);
+      drawThumb(thumb, tpl, tpl.bg);
     }
   }
 
@@ -1218,6 +1225,9 @@ currentStyle = "Dark Premium";
     };
 
     try {
+      // New generation cycle: allow seed renders before AI results, then lock after commit
+      window.__NEXORA_AI_COMMITTED__ = false;
+
       // Instant client-side templates (design.js) — never blocks UI.
       // Use the requested count for ALL categories (YouTube included)
       seedTemplates(payload.count);
@@ -1234,6 +1244,9 @@ currentStyle = "Dark Premium";
         return res.json().catch(() => null);
       }).then(data => {
     if(!data || !Array.isArray(data.templates) || !data.templates.length) return;
+
+    // Commit AI templates: after this point, block ALL legacy/seed/fallback re-renders
+    window.__NEXORA_AI_COMMITTED__ = true;
 
     // Replace seeded templates with REAL backend templates (archetypes + style-engine).
     __lastTemplates = data.templates;
@@ -1328,8 +1341,6 @@ function renderPreview(canvas, t){
 
 <script src="template-contract.js"></script>
   <script src="spine-core.js"></script>
-  <script src="style-engine.js"></script>
-  <script src="preview-renderer.js"></script>
   <script src="design.js"></script>
 <script src="invisible-editor.js"></script>
 
@@ -1374,4 +1385,5 @@ function renderPreview(canvas, t){
 </script>
 
 </body>
-</html>
+</html>}
+
