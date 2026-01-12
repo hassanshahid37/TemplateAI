@@ -1,4 +1,5 @@
 
+
 /* template-contract.js — Nexora TemplateContract v1 (System Spine)
    Purpose: Shared contract builder + validator for templates.
    - Works in plain <script> environments (no bundler).
@@ -13,7 +14,7 @@
 */
 
 (function () {
-  if (window.NexoraSpine) return;
+  window.NexoraSpine = window.NexoraSpine || {};
 
   const VERSION = "v1";
   const ROLE_SET = new Set(["background", "headline", "subhead", "image", "cta", "badge"]);
