@@ -854,24 +854,25 @@ if(layout==="posterHero"){
     return out;
   }
 
-  function renderPreview(template, container){
+  function renderPreview(template, container) {
+  if (!container) return;
+
+  // === Preview Renderer v1 HARD GUARD ===
+  // If contract exists, legacy preview MUST NOT run
+  try {
+    if (template && template.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === 'function') {
+      const content = template.content || template.doc?.content || {};
+      container.innerHTML = '';
+      window.NexoraPreview.renderTo(container, { contract: template.contract, content });
+      return; // 🚫 STOP legacy rendering completely
+    }
+  } catch (e) {
+    // fail silently and allow legacy fallback
+  }
+
+
     if(!container) return;
-
-    // Preview Renderer v1 (spine-first): use contract+content when available.
-    // Falls back to legacy DOM preview below if contract isn't present.
-    try{
-      if(window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function" && template?.contract){
-        const content = template?.doc?.content || template?.content || {
-          headline: (template?.elements||[]).find(e=>e?.role==="headline" || e?.type==="text")?.text || "",
-          subhead:  (template?.elements||[]).filter(e=>e?.type==="text").slice(1,2)[0]?.text || "",
-          cta: template?.cta || (template?.elements||[]).find(e=>e?.role==="cta")?.text || ""
-        };
-        window.NexoraPreview.renderTo(container, { contract: template.contract, content });
-        return;
-      }
-    }catch(_){}
-
-container.innerHTML = "";
+    container.innerHTML = "";
     const w=template?.canvas?.w||1080, h=template?.canvas?.h||1080;
     const boxW=container.clientWidth||260;
     const scale = boxW / w;
