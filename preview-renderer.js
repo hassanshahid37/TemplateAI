@@ -108,17 +108,33 @@
   }
 
   window.NexoraPreview = {
+    // Render into #canvas (default)
     render({ contract, content }) {
-      try {
-        if (!validate(contract)) return;
+      const root = document.getElementById("canvas");
+      if (!root) return;
+      return this.renderTo(root, { contract, content });
+    },
 
-        const root = document.getElementById("canvas");
+    // Render into any container element (used for grid tiles)
+    renderTo(root, { contract, content }) {
+      try {
         if (!root) return;
+
+        // Allow passing a full template object too: {contract, doc, ...}
+        const tpl = (contract && contract.contract && !content) ? contract : null;
+        if (tpl) {
+          content = tpl?.doc?.content || tpl?.content || content;
+          contract = tpl?.contract || contract;
+        }
+
+        if (!validate(contract)) return;
 
         clear(root);
 
         const { width, height } = contract.canvas || {};
         if (width && height) {
+          // keep layout stable in different containers
+          root.style.position = root.style.position || "relative";
           root.style.aspectRatio = width + " / " + height;
         }
 
@@ -128,7 +144,11 @@
           palette: contract.palette || {}
         };
 
-        contract.layers.forEach(layer => {
+        // Ensure background is first and actually fills container
+        const layers = Array.isArray(contract.layers) ? contract.layers.slice() : [];
+        layers.sort((a, b) => (a.role === "background" ? -1 : 0) - (b.role === "background" ? -1 : 0));
+
+        layers.forEach(layer => {
           const node = renderLayer(layer, content || {}, meta);
           if (node) root.appendChild(node);
         });
