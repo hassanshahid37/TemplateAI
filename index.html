@@ -786,6 +786,23 @@
     }catch(_){}
   }
 }
+// Unified preview router (no UI changes):
+// Prefer Preview Renderer v1 when contract exists; fallback to legacy drawThumb otherwise.
+function renderThumb(thumb, tplOrElements, bg){
+  if(!thumb) return;
+  try{
+    const tpl = Array.isArray(tplOrElements)
+      ? { elements: tplOrElements, canvas: { w: 980, h: 620 } }
+      : (tplOrElements || {});
+    if(tpl && tpl.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+      thumb.innerHTML = "";
+      window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content: tpl.content || tpl.doc?.content || {} });
+      return;
+    }
+  }catch(_){}
+  drawThumb(thumb, tplOrElements, bg);
+}
+
 
 
   function seedTemplates(n){
@@ -820,7 +837,7 @@ if(!isYT && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === 
   window.NexoraDesign.renderPreview(t, thumb);
 }else{
   // Use our renderer (supports element.style bridge via mkText)
-  drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
+  renderThumb(thumb, toEditorTemplate(t), (t.bg || null));
 }
       }
 
@@ -942,6 +959,9 @@ function toEditorTemplate(tpl){
       style: tpl.style || "Dark Premium",
       bg: tpl.bg || null,
       canvas: tpl.canvas || { w: W, h: H },
+      contract: tpl.contract || null,
+      content: tpl.content || null,
+      doc: tpl.doc || null,
       elements: outEls
     };
   }
@@ -1078,12 +1098,12 @@ function renderTemplatesFromList(list){
     if(isYT || hasStyle){
       // Use our renderer so archetype/style-engine output is visible in previews.
       const tpl = toEditorTemplate(t);
-      drawThumb(thumb, tpl, tpl.bg);
+      renderThumb(thumb, tpl, tpl.bg);
     }else if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
       window.NexoraDesign.renderPreview(t, thumb);
     }else{
       const tpl = toEditorTemplate(t);
-      drawThumb(thumb, tpl, tpl.bg);
+      renderThumb(thumb, tpl, tpl.bg);
     }
   }
 
