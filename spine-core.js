@@ -1,5 +1,6 @@
 
 
+
 // spine-core.js
 // Nexora Spine Core (S0–S7) — deterministic, extension-friendly.
 // Works in both Browser (window.NexoraSpine) and Node (module.exports).
@@ -72,7 +73,7 @@
   // Keep this table small + stable. You can extend without breaking.
   const CANVAS_SIZES = {
     "Instagram Post": { w: 1080, h: 1080 },
-    "Instagram Story": { w: 1080, h: 1920 },
+    "Story": { w: 1080, h: 1920 },
     "YouTube Thumbnail": { w: 1280, h: 720 },
     "Flyer": { w: 1080, h: 1350 },
     "Poster": { w: 1080, h: 1350 },
