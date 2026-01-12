@@ -24,6 +24,7 @@ try {
 // - Deterministic (no external AI calls), never throws: always 200 JSON.
 
 async function handler(req, res) {
+  let count = 1; // default if missing/invalid; UI should pass 1–200
   try {
     // Basic CORS / preflight safety
     res.statusCode = 200;
@@ -47,18 +48,23 @@ async function handler(req, res) {
     const category = typeof body.category === "string" ? body.category : "Instagram Post";
     const style = typeof body.style === "string" ? body.style : "Dark Premium";
 
-    // Count
-    let count = Number(body.count);
-    if (!Number.isFinite(count)) count = 4;
-    count = Math.max(1, Math.min(200, Math.floor(count)));
-
-    // Accept divergence/fork metadata but NEVER require it
+    // Count (authoritative; 1–200)
+    {
+      const raw = body && (body.count ?? body.c);
+      const parsed = Number.parseInt(raw, 10);
+      if (Number.isFinite(parsed)) count = parsed;
+      // If invalid/missing, keep default count (1).
+      count = Math.max(1, Math.min(200, count));
+    }
+// Accept divergence/fork metadata but NEVER require it
     const divergenceIndexRaw = body.divergenceIndex ?? body.forkIndex ?? body.variantIndex ?? body.i;
     let divergenceIndex = Number(divergenceIndexRaw);
     if (!Number.isFinite(divergenceIndex)) divergenceIndex = -1;
 
     
-    const withContracts = templates.map(t => {
+    const templates = makeTemplates({ prompt, category, style, count, divergenceIndex });
+
+    const withContracts = templates.map((t, i) => {
       const size = CATEGORIES[category] || { w: 1080, h: 1080 };
       const content = {
         headline: (t.elements||[]).find(e=>e.type==="text")?.text || "",
@@ -72,15 +78,8 @@ async function handler(req, res) {
           e.type==="pill" || e.type==="chip" ? "cta" :
           "headline"
       }));
-      return Object.assign({}, t, {
-        contract: {
-          version: 1,
-          category,
-          canvas: { width: size.w, height: size.h },
-          layers
-        },
-        content
-      });
+            const contract = (t && t.contract) ? t.contract : buildContractV1(String(t?.id || ('tpl_'+String(i+1))), category, { w: size.w, h: size.h }, (t.elements||[]));
+      return Object.assign({}, t, { contract, content });
     });
     return res.end(JSON.stringify({ success: true, templates: withContracts }));
     
@@ -91,7 +90,7 @@ async function handler(req, res) {
         prompt: "",
         category: "Instagram Post",
         style: "Dark Premium",
-        count: 4,
+        count: Number.isFinite(count) ? count : 1,
         divergenceIndex: -1
 });
       return res.end(
