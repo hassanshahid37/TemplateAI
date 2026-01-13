@@ -5,6 +5,7 @@
 
 
 
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -797,15 +798,18 @@ function renderThumb(thumb, tplOrElements, bg){
     const tpl = Array.isArray(tplOrElements)
       ? { elements: tplOrElements, canvas: { w: 980, h: 620 } }
       : (tplOrElements || {});
-    if(tpl && tpl.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+    const content = tpl && (tpl.content || tpl.doc?.content);
+    const hasContent = !!(content && typeof content === "object" && Object.keys(content).length);
+    // Use Preview Renderer v1 ONLY when a real doc/content exists.
+    // Otherwise, fall back to element-based thumb renderer to avoid blank previews.
+    if(tpl && tpl.contract && hasContent && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
       thumb.innerHTML = "";
-      window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content: tpl.content || tpl.doc?.content || {} });
+      window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content });
       return;
     }
   }catch(_){}
   drawThumb(thumb, tplOrElements, bg);
 }
-
 
 
   function seedTemplates(n){
@@ -1101,21 +1105,19 @@ function renderTemplatesFromList(list){
         const hasStyle = Array.isArray(t.elements) && t.elements.some(e => e && typeof e === "object" && e.style);
         const hasContract = !!t.contract;
 
-        // ✅ Authority: after AI commit, contract-based Preview Renderer v1 must be used (via renderThumb)
-        if(window.__NEXORA_AI_COMMITTED__ && hasContract){
-          const tpl = toEditorTemplate(t);
+        const tpl = toEditorTemplate(t);
+
+        // SINGLE AUTHORITY ROUTING:
+        // - Contract ALWAYS uses unified renderer
+        // - After AI commit, legacy renderer is NEVER allowed (prevents renderer fights / flashing)
+        if (hasContract || window.__NEXORA_AI_COMMITTED__) {
           renderThumb(thumb, tpl, tpl.bg);
-        }else if(isYT || hasStyle){
-          const tpl = toEditorTemplate(t);
-          renderThumb(thumb, tpl, tpl.bg);
-        }else if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
+        } else if (!isYT && !hasStyle && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function") {
           window.NexoraDesign.renderPreview(t, thumb);
-        }else{
-          const tpl = toEditorTemplate(t);
+        } else {
           renderThumb(thumb, tpl, tpl.bg);
         }
       }
-  }
 
       div.addEventListener("click", ()=>openEditorWith(t));
       div.addEventListener("keydown",(e)=>{ if(e.key==="Enter") openEditorWith(t); });
@@ -1127,8 +1129,7 @@ function renderTemplatesFromList(list){
     window.NEXORA.lastTemplates = __lastTemplates;
   }
 
-  function tryRestoreHome(
-){
+  function tryRestoreHome(){
     // only restore when we explicitly came back from editor; refresh should reset
     const navType = getNavType();
     if(navType === "reload"){ clearHomeState(); return false; }
