@@ -36,10 +36,23 @@ async function handler(req, res) {
     if (req.method === "OPTIONS") return res.end();
     if (req.method !== "POST") return res.end(JSON.stringify({ success: true, templates: [] }));
 
-    // Parse body safely (platforms may give object or string)
+    // Parse body safely (Vercel/Node may not populate req.body)
     let body = {};
     try {
-      body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+      if (req.body && typeof req.body === "object") {
+        body = req.body;
+      } else if (typeof req.body === "string" && req.body.trim().length) {
+        body = JSON.parse(req.body);
+      } else {
+        const chunks = [];
+        await new Promise((resolve) => {
+          req.on("data", (c) => chunks.push(c));
+          req.on("end", resolve);
+          req.on("error", resolve);
+        });
+        const raw = Buffer.concat(chunks).toString("utf8").trim();
+        body = raw ? JSON.parse(raw) : {};
+      }
     } catch {
       body = {};
     }
@@ -719,27 +732,20 @@ function blocksToElements(blocks, canvas, pal, seed, labelText) {
 
 function buildContractV1(templateId, category, canvas, elements){
   try{
-    const layers = (elements||[]).filter(Boolean).map((e, i)=>{
-      const role =
-        String(e.role || (e.type==="photo" ? "image" : (e.type==="bg" ? "background" : (e.type==="text" ? "headline" : (e.type==="pill" ? "cta" : "badge")))));
-      return {
-        id: String(e.id || ("l_"+i)),
-        role,
-        locked: true
-      };
-    });
-
-    const cat = String(category || "Unknown");
-    const profileId = cat.replace(/\s+/g, "_").toLowerCase();
-
+    const layers = (elements||[]).filter(Boolean).map((e, i)=>({
+      id: String(e.id || ("l_"+i)),
+      role: String(e.role || (e.type==="photo" ? "image" : (e.type==="bg" ? "background" : "badge"))),
+      locked: false
+    }));
     return {
       version: "v1",
       templateId: String(templateId),
-      category: cat,
-      canvas: { width: Number(canvas.w), height: Number(canvas.h) },
-      exportProfiles: [profileId],
+      category: String(category || "Unknown"),
+      canvas: { w: canvas.w, h: canvas.h },
+      exportProfiles: [{ id:"default", label:String(category||"Export"), w: canvas.w, h: canvas.h, format:"png" }],
       layers,
-      createdAt: Date.now()
+      constraints: {},
+      roles: { required: ["headline"], optional: ["subhead","cta","badge","image","background"] }
     };
   }catch(_){
     return null;
