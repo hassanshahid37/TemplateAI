@@ -18,6 +18,50 @@ try {
     // leave no-op
   }
 }
+
+// CategorySpecV1 normalizer is optional at runtime.
+// We load it lazily via dynamic import so this CommonJS handler never crashes if the file is missing.
+let __normalizeCategory = null;
+let __normalizeCategoryTried = false;
+async function getNormalizeCategory() {
+  try {
+    if (typeof __normalizeCategory === "function") return __normalizeCategory;
+    if (__normalizeCategoryTried) return null;
+    __normalizeCategoryTried = true;
+
+    // Prefer CommonJS require when available (fast, works with UMD build)
+    try {
+      // eslint-disable-next-line global-require
+      const mod = require("../category-spec-v1.js");
+      __normalizeCategory = (mod && typeof mod.normalizeCategory === "function") ? mod.normalizeCategory : null;
+      if (typeof __normalizeCategory === "function") return __normalizeCategory;
+    } catch (_) {}
+
+    try {
+      // eslint-disable-next-line global-require
+      const mod = require("./category-spec-v1.js");
+      __normalizeCategory = (mod && typeof mod.normalizeCategory === "function") ? mod.normalizeCategory : null;
+      if (typeof __normalizeCategory === "function") return __normalizeCategory;
+    } catch (_) {}
+
+    // Fallback: dynamic import (handles ESM if repo is configured as modules)
+    try {
+      const mod = await import("../category-spec-v1.js");
+      __normalizeCategory = (mod && typeof mod.normalizeCategory === "function") ? mod.normalizeCategory : null;
+      if (typeof __normalizeCategory === "function") return __normalizeCategory;
+    } catch (_) {}
+    try {
+      const mod = await import("./category-spec-v1.js");
+      __normalizeCategory = (mod && typeof mod.normalizeCategory === "function") ? mod.normalizeCategory : null;
+      if (typeof __normalizeCategory === "function") return __normalizeCategory;
+    } catch (_) {}
+
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Purpose: ALWAYS return REAL templates (canvas + elements) compatible with index.html preview.
 // Notes:
 // - CommonJS handler for Vercel/Netlify-style /api directory.
@@ -58,7 +102,20 @@ async function handler(req, res) {
     }
 
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    const category = typeof body.category === "string" ? body.category : "Instagram Post";
+    
+const rawCategory = typeof body.category === "string" ? body.category : "Instagram Post";
+let category = rawCategory;
+
+// P5.1: normalize category through CategorySpecV1 when available (label stays backwards-compatible)
+try {
+  const norm = await getNormalizeCategory();
+  if (typeof norm === "function") {
+    const spec = norm(rawCategory);
+    if (spec && typeof spec.label === "string" && spec.label.trim()) category = spec.label.trim();
+  }
+} catch (_) {
+  // leave raw category
+}
     const style = typeof body.style === "string" ? body.style : "Dark Premium";
 
     // Count (authoritative; 1–200)
@@ -2308,12 +2365,25 @@ async function generateTemplates(payload) {
   body = body || {};
   const normalized = {
     prompt: body.prompt || '',
-    category: body.category || 'Instagram Post',
+    
+category: (function(){
+  const raw = body.category || 'Instagram Post';
+  return raw;
+})(),
     style: body.style || 'Dark Premium',
     count: Number.isFinite(Number(body.count)) ? Number(body.count) : 3,
     divergenceIndex: Number.isFinite(Number(body.divergenceIndex)) ? Number(body.divergenceIndex) : 0,
   };
-  return makeTemplates(normalized);
+
+// P5.1: normalize category label via CategorySpecV1 when available
+try {
+  const norm = await getNormalizeCategory();
+  if (typeof norm === "function") {
+    const spec = norm(normalized.category);
+    if (spec && typeof spec.label === "string" && spec.label.trim()) normalized.category = spec.label.trim();
+  }
+} catch (_) {}
+return makeTemplates(normalized);
 }
 
 module.exports = handler;
