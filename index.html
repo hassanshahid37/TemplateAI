@@ -390,7 +390,8 @@
   const $ = (s)=>document.querySelector(s);
   const grid = $("#previewGrid");
   const statusEl = $("#status");
-  // Preview authority lock (global)
+
+  // Global AI commit lock: once AI templates are committed, seed/legacy renders must never run again.
   window.__NEXORA_AI_COMMITTED__ = window.__NEXORA_AI_COMMITTED__ || false;
 
   function setTheme(next){
@@ -788,10 +789,27 @@
     }catch(_){}
   }
 }
+// Unified preview router (no UI changes):
+// Prefer Preview Renderer v1 when contract exists; fallback to legacy drawThumb otherwise.
+function renderThumb(thumb, tplOrElements, bg){
+  if(!thumb) return;
+  try{
+    const tpl = Array.isArray(tplOrElements)
+      ? { elements: tplOrElements, canvas: { w: 980, h: 620 } }
+      : (tplOrElements || {});
+    if(tpl && tpl.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+      thumb.innerHTML = "";
+      window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content: tpl.content || tpl.doc?.content || {} });
+      return;
+    }
+  }catch(_){}
+  drawThumb(thumb, tplOrElements, bg);
+}
+
 
 
   function seedTemplates(n){
-    if (window.__NEXORA_AI_COMMITTED__) return;
+  if (window.__NEXORA_AI_COMMITTED__) return;
 grid.innerHTML = "";
     __lastTemplates = [];
     const category = $("#cat").value;
@@ -804,6 +822,9 @@ if(window.NexoraDesign && typeof window.NexoraDesign.generateTemplates === "func
   try{
     const rawTemplates = window.NexoraDesign.generateTemplates({ category, style, prompt, count: n });
     const templates = Array.isArray(rawTemplates) ? rawTemplates : [];
+
+    // IMPORTANT: If design.js returns no templates, fall through to legacy ultra-safe seeds
+    if(!templates.length) throw new Error("design.js returned 0 templates");
 
     templates.forEach((t, i) => {
       const div = document.createElement("div");
@@ -823,7 +844,7 @@ if(!isYT && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === 
   window.NexoraDesign.renderPreview(t, thumb);
 }else{
   // Use our renderer (supports element.style bridge via mkText)
-  drawThumb(thumb, toEditorTemplate(t), (t.bg || null));
+  renderThumb(thumb, toEditorTemplate(t), (t.bg || null));
 }
       }
 
@@ -945,6 +966,9 @@ function toEditorTemplate(tpl){
       style: tpl.style || "Dark Premium",
       bg: tpl.bg || null,
       canvas: tpl.canvas || { w: W, h: H },
+      contract: tpl.contract || null,
+      content: tpl.content || null,
+      doc: tpl.doc || null,
       elements: outEls
     };
   }
@@ -1051,7 +1075,6 @@ let tpl = payload?.elements ? toEditorTemplate(payload) : null;
   }
 
   
-
 function renderTemplatesFromList(list){
     const grid = document.getElementById("previewGrid");
     if(!grid) return;
@@ -1062,42 +1085,36 @@ function renderTemplatesFromList(list){
     (list||[]).forEach((t, i)=>{
       if(!t) return;
 
+      // Keep RAW templates; convert only when opening the editor.
       __lastTemplates.push(t);
 
       const div = document.createElement("div");
       div.className = "tile";
       div.tabIndex = 0;
 
-      const title = (t.title || (t.category||"Template") + " #" + (i+1));
+      const title = ((window.__NEXORA_AI_COMMITTED__ && t.category) ? (t.category + ' #' + (i+1)) : (t.title || ((t.category||'Template') + ' #' + (i+1))));
       const desc = (t.description || ((t.style||"")+" • Canva-style")).trim();
 
       div.innerHTML = `<div class="thumb" aria-hidden="true"></div><b>${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span>`;
 
       const thumb = div.querySelector(".thumb");
-
       if(thumb){
-        let rendered = false;
+        const cat = String(t.category || document.getElementById("cat")?.value || "");
+        const isYT = cat.toLowerCase().includes("youtube");
+        const hasStyle = Array.isArray(t.elements) && t.elements.some(e => e && typeof e === "object" && e.style);
+        const hasContract = !!t.contract;
 
-        // ✅ AI templates: render via contract-based Preview Renderer v1
-        if(t.contract && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
-          rendered = window.NexoraPreview.renderTo(thumb, {
-            contract: t.contract,
-            content: t.content || {},
-            meta: {
-              category: t.category,
-              style: t.style
-            }
-          });
-        }
+        const tpl = toEditorTemplate(t);
 
-        // 🔁 Safe fallback (never blank)
-        if(!rendered){
-          const tpl = toEditorTemplate(t);
-          if(window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function"){
-            window.NexoraDesign.renderPreview(t, thumb);
-          }else{
-            drawThumb(thumb, tpl, tpl.bg);
-          }
+        // SINGLE AUTHORITY ROUTING (no DOM changes)
+        if (hasContract) {
+          renderThumb(thumb, tpl, tpl.bg);
+        } else if (window.__NEXORA_AI_COMMITTED__) {
+          renderThumb(thumb, tpl, tpl.bg);
+        } else if (!isYT && !hasStyle && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function") {
+          window.NexoraDesign.renderPreview(t, thumb);
+        } else {
+          renderThumb(thumb, tpl, tpl.bg);
         }
       }
 
@@ -1106,10 +1123,10 @@ function renderTemplatesFromList(list){
       grid.appendChild(div);
     });
 
+    // expose for debugging
     window.NEXORA = window.NEXORA || {};
     window.NEXORA.lastTemplates = __lastTemplates;
-}
-
+  }
 
   function tryRestoreHome(
 ){
@@ -1135,6 +1152,11 @@ function renderTemplatesFromList(list){
       if(styleEl && st.settings.style) styleEl.value = st.settings.style;
       if(promptEl) promptEl.value = st.settings.prompt || "";
       if(notesEl) notesEl.value = st.settings.notes || "";
+
+      // If restored templates include contract/doc/content, treat as AI-committed so seed can't overwrite.
+      try{
+        window.__NEXORA_AI_COMMITTED__ = Array.isArray(st.templates) && st.templates.some(t => t && (t.contract || t.doc || t.content));
+      }catch(_){ window.__NEXORA_AI_COMMITTED__ = window.__NEXORA_AI_COMMITTED__ || false; }
 
       renderTemplatesFromList(st.templates);
 
@@ -1200,6 +1222,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   btn.addEventListener("click", async (event) => {
+  // New generation cycle: allow seed before AI, then lock after AI commit
+  window.__NEXORA_AI_COMMITTED__ = false;
 currentLayout = "Modern";
 currentStyle = "Dark Premium";
 
@@ -1214,7 +1238,7 @@ currentStyle = "Dark Premium";
     try {
       // Instant client-side templates (design.js) — never blocks UI.
       // Use the requested count for ALL categories (YouTube included)
-      seedTemplates(payload.count);
+      if (!window.__NEXORA_AI_COMMITTED__) seedTemplates(payload.count);
       try{ saveHomeState(); }catch(_){ }
       statusEl.textContent = `Generated ${payload.count}`;
 
@@ -1243,7 +1267,7 @@ currentStyle = "Dark Premium";
 
 } catch (e) {
       // ✅ Fallback: never leave user with "nothing happened"
-      seedTemplates(payload.count);
+      if (!window.__NEXORA_AI_COMMITTED__) seedTemplates(payload.count);
     }
   });
 });
@@ -1323,6 +1347,8 @@ function renderPreview(canvas, t){
 
 <script src="template-contract.js"></script>
   <script src="spine-core.js"></script>
+  <script src="style-engine.js"></script>
+  <script src="preview-renderer.js"></script>
   <script src="design.js"></script>
 <script src="invisible-editor.js"></script>
 
@@ -1331,7 +1357,7 @@ function renderPreview(canvas, t){
 <script>
 (function(){
   function isYouTubeSelected(){
-    const sel = document.querySelector('select');
+    const sel = document.getElementById('cat') || document.querySelector('select');
     if(!sel) return false;
     return (sel.value || '').toLowerCase().includes('youtube');
   }
@@ -1363,6 +1389,8 @@ function renderPreview(canvas, t){
 
   // Initial check
   setTimeout(toggleYT, 0);
+  // Initial apply
+  document.addEventListener('DOMContentLoaded', toggleYT);
 })();
 </script>
 
