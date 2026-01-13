@@ -4,23 +4,7 @@
       "handle": "filesystem"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)\\.js",
-      "dest": "/$1.js"
-    },
-    {
-      "src": "/(.*)\\.css",
-      "dest": "/$1.css"
-    },
-    {
-      "src": "/editor\\.html",
-      "dest": "/editor.html"
-    },
-    {
-      "src": "/(.*)",
+      "src": "/(?!.*\\.(?:js|css|map|png|jpg|jpeg|gif|svg|webp|woff2?|ttf|eot)$).*",
       "dest": "/index.html"
     }
   ]
