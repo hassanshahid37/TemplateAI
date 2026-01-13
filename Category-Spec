@@ -1,0 +1,73 @@
+
+/**
+ * Nexora P5.1 – V1
+ * Single source of truth for category normalization.
+ * ADDITIVE ONLY. Does not modify existing logic.
+ */
+
+export const CategorySpecV1 = {
+  instagram_post: {
+    id: "instagram_post",
+    label: "Instagram Post",
+    kind: "social",
+    canvas: { w: 1080, h: 1080 },
+    exportProfiles: ["instagram_post"],
+    roles: {
+      required: ["background"],
+      optional: ["headline", "subhead", "image", "logo", "cta"]
+    },
+    defaults: {
+      style: "Dark Premium",
+      background: "solid"
+    },
+    constraints: {
+      allowCTA: true
+    }
+  },
+
+  youtube_thumbnail: {
+    id: "youtube_thumbnail",
+    label: "YouTube Thumbnail",
+    kind: "video",
+    canvas: { w: 1280, h: 720 },
+    exportProfiles: ["youtube_thumbnail"],
+    roles: {
+      required: ["background", "headline"],
+      optional: ["image", "badge"]
+    },
+    defaults: {
+      style: "Dark Premium",
+      background: "solid"
+    },
+    constraints: {
+      allowCTA: false
+    }
+  },
+
+  logo: {
+    id: "logo",
+    label: "Logo",
+    kind: "logo",
+    canvas: { w: 1024, h: 1024 },
+    exportProfiles: ["logo"],
+    roles: {
+      required: ["image"],
+      optional: ["tagline"],
+      forbidden: ["headline", "subhead", "cta"]
+    },
+    defaults: {
+      style: "Corporate",
+      background: "transparent"
+    },
+    constraints: {
+      allowCTA: false,
+      allowPhoto: false
+    }
+  }
+};
+
+export function normalizeCategory(input) {
+  if (!input) return CategorySpecV1.instagram_post;
+  const key = String(input).toLowerCase().replace(/\s+/g, "_");
+  return CategorySpecV1[key] || CategorySpecV1.instagram_post;
+}
