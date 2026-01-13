@@ -2,9 +2,16 @@
  * Nexora P5.1 – CategorySpecV1
  * Single source of truth for category normalization.
  * ADDITIVE ONLY. No existing logic modified.
+ *
+ * This file is intentionally UMD-style so it works in:
+ * - Browser <script> (window.CategorySpecV1 / window.normalizeCategory)
+ * - Node/CommonJS (require('./category-spec-v1.js'))
+ * It does NOT require bundlers or "type=module".
  */
+(function () {
+  const root = (typeof window !== "undefined") ? window : globalThis;
 
-export const CategorySpecV1 = {
+  const CategorySpecV1 = {
 
   instagram_post: {
     id: "instagram_post",
@@ -134,9 +141,25 @@ export const CategorySpecV1 = {
   }
 
 };
-
-export function normalizeCategory(input) {
+  function normalizeCategory(input) {
   if (!input) return CategorySpecV1.instagram_post;
   const key = String(input).toLowerCase().replace(/\s+/g, "_");
   return CategorySpecV1[key] || CategorySpecV1.instagram_post;
-}
+  }
+
+  // Browser globals (non-spine, simple)
+  if (!root.CategorySpecV1) root.CategorySpecV1 = CategorySpecV1;
+  if (!root.normalizeCategory) root.normalizeCategory = normalizeCategory;
+
+  // Optional: also expose under NexoraSpine if present (merge-safe)
+  if (root.NexoraSpine) {
+    if (!root.NexoraSpine.CategorySpecV1) root.NexoraSpine.CategorySpecV1 = CategorySpecV1;
+    if (!root.NexoraSpine.normalizeCategory) root.NexoraSpine.normalizeCategory = normalizeCategory;
+  }
+
+  // CommonJS export
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports.CategorySpecV1 = CategorySpecV1;
+    module.exports.normalizeCategory = normalizeCategory;
+  }
+})();
