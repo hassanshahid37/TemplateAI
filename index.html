@@ -1345,21 +1345,101 @@ function renderPreview(canvas, t){
 </script>
 
 
-<script src="category-spec-v1.js"></script>
+<!-- P5.1 Bootloader: load CategorySpec first (without noisy 404s), then load remaining scripts in order -->
 <script>
-  // P5.1 safety: if CategorySpec fails to load, surface a clear console error (no silent fallback)
-  if(typeof window.normalizeCategory !== "function"){
-    console.error("[P5.1] category-spec-v1.js did not load. Ensure category-spec-v1.js is deployed next to index.html.");
+(function(){
+  const P5 = "[P5.1]";
+  const log = (...a) => console.log(P5, ...a);
+  const warn = (...a) => console.warn(P5, ...a);
+  const error = (...a) => console.error(P5, ...a);
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      // Keep execution order deterministic when we load multiple scripts.
+      s.async = false;
+      s.onload = () => resolve(src);
+      s.onerror = () => reject(new Error("Failed to load: " + src));
+      document.head.appendChild(s);
+    });
   }
+
+  async function headOk(url){
+    // Use HEAD to avoid browser "failed to load script" noise.
+    // If HEAD is blocked, fall back to GET.
+    try{
+      const r = await fetch(url, { method: "HEAD", cache: "no-store" });
+      if(r && r.ok) return true;
+    }catch(_){}
+    try{
+      const r2 = await fetch(url, { method: "GET", cache: "no-store" });
+      return !!(r2 && r2.ok);
+    }catch(_){}
+    return false;
+  }
+
+  async function findCategorySpecPath(){
+    const paths = [
+      "/category-spec-v1.js",
+      "./category-spec-v1.js",
+      "category-spec-v1.js",
+      "/public/category-spec-v1.js",
+      "./public/category-spec-v1.js",
+      "/assets/category-spec-v1.js",
+      "./assets/category-spec-v1.js",
+      "/js/category-spec-v1.js",
+      "./js/category-spec-v1.js",
+      "/src/category-spec-v1.js",
+      "./src/category-spec-v1.js"
+    ];
+    for(const p of paths){
+      if(await headOk(p)) return p;
+    }
+    return null;
+  }
+
+  async function boot(){
+    // 1) CategorySpec (optional but strongly recommended for P5.1)
+    try{
+      const p = await findCategorySpecPath();
+      if(p){
+        await loadScript(p);
+        window.__P5_1_CAT_SPEC_LOADED__ = true;
+        log("Loaded category-spec-v1.js from:", p);
+      }else{
+        warn("category-spec-v1.js not found on this deploy. P5.1 normalization may be disabled. " +
+             "Fix: ensure category-spec-v1.js is deployed alongside index.html (or in /public).");
+      }
+    }catch(e){
+      error("Failed to load category-spec-v1.js.", e);
+    }
+
+    // 2) Load app scripts in the exact same order as before
+    const deps = [
+      "template-contract.js",
+      "spine-core.js",
+      "style-engine.js",
+      "preview-renderer.js",
+      "design.js",
+      "invisible-editor.js"
+    ];
+
+    for(const d of deps){
+      try{
+        await loadScript(d);
+      }catch(e){
+        error("Critical: failed to load " + d + ". App may not work.", e);
+        return;
+      }
+    }
+
+    window.__NEXORA_BOOT_READY__ = true;
+  }
+
+  boot();
+})();
 </script>
-
-<script src="template-contract.js"></script>
-  <script src="spine-core.js"></script>
-  <script src="style-engine.js"></script>
-  <script src="preview-renderer.js"></script>
-  <script src="design.js"></script>
-<script src="invisible-editor.js"></script>
-
 
 <!-- YT Preview Shell Toggle -->
 <script>
