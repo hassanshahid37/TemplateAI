@@ -1346,6 +1346,12 @@ function renderPreview(canvas, t){
 
 
 <script src="category-spec-v1.js"></script>
+<script>
+  // P5.1 safety: if CategorySpec fails to load, surface a clear console error (no silent fallback)
+  if(typeof window.normalizeCategory !== "function"){
+    console.error("[P5.1] category-spec-v1.js did not load. Ensure category-spec-v1.js is deployed next to index.html.");
+  }
+</script>
 
 <script src="template-contract.js"></script>
   <script src="spine-core.js"></script>
