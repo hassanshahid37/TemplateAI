@@ -1,6 +1,7 @@
 
 
 
+
 // invisible-editor.js — Editor Handoff Fix (AD-H3)
 // Goal: ALWAYS hand off generated template into editor.
 // Strategy:
