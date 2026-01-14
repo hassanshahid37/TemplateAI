@@ -84,9 +84,11 @@
   };
 
   function resolveCanvas(category){
+    // P5.1: prefer CategorySpecV1 canvas if available (prevents silent Instagram fallback)
     try{
-      if(root?.CategorySpecV1 && typeof root.normalizeCategory === "function"){
-        const spec = root.normalizeCategory(category);
+      if(root && root.normalizeCategory && root.CategorySpecV1){
+        const id = root.normalizeCategory(category);
+        const spec = root.CategorySpecV1 && root.CategorySpecV1[id];
         if(spec && spec.canvas && spec.canvas.w && spec.canvas.h){
           return { w: spec.canvas.w, h: spec.canvas.h };
         }
