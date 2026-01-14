@@ -1,6 +1,10 @@
+
 // === Nexora Preview Authority Flag ===
 // Once AI templates are committed, no legacy/seed re-render is allowed.
-let __NEXORA_AI_COMMITTED__ = false;
+// NOTE: use window.__NEXORA_AI_COMMITTED__ (top-level `let` does not attach to window).
+if (typeof window !== 'undefined') {
+  window.__NEXORA_AI_COMMITTED__ = window.__NEXORA_AI_COMMITTED__ || false;
+}
 
 /* Nexora – design.js
    Visual template generator (client-side fallback + preview layouts)
@@ -1182,4 +1186,3 @@ function applyIntentScene(template, intent) {
     };
   }
 })();
-
