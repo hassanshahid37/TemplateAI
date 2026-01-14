@@ -2,6 +2,7 @@
 
 
 
+
 // spine-core.js
 // Nexora Spine Core (S0–S7) — deterministic, extension-friendly.
 // Works in both Browser (window.NexoraSpine) and Node (module.exports).
@@ -86,9 +87,14 @@
   function resolveCanvas(category){
     // P5.1: prefer CategorySpecV1 canvas if available (prevents silent Instagram fallback)
     try{
-      if(root && root.normalizeCategory && root.CategorySpecV1){
-        const id = root.normalizeCategory(category);
-        const spec = root.CategorySpecV1 && root.CategorySpecV1[id];
+      if(root && typeof root.normalizeCategory === "function" && root.CategorySpecV1){
+        // normalizeCategory() returns a *spec object* in P5.1, not an id string.
+        // Support both shapes to avoid silent Instagram fallback.
+        const norm = root.normalizeCategory(category);
+        const spec = (norm && typeof norm === "object")
+          ? norm
+          : (typeof norm === "string" ? (root.CategorySpecV1[norm] || root.CategorySpecV1[String(norm).toLowerCase()] || null) : null);
+
         if(spec && spec.canvas && spec.canvas.w && spec.canvas.h){
           return { w: spec.canvas.w, h: spec.canvas.h };
         }
@@ -129,7 +135,7 @@
       contract = root?.NexoraSpine?.createContract?.({
         templateId: "doc_"+String(doc.meta.seed),
         category,
-        canvas,
+        canvas: { w: canvas.w, h: canvas.h, width: canvas.w, height: canvas.h },
         palette: null,
         layers: [] // filled after graph build
       }) || null;
@@ -407,6 +413,100 @@
     const template = docToTemplate(doc);
     return { ok: v.ok, errors: v.errors, doc, template };
   }
+  // ---------- Compatibility (TemplateContract v1 bridge) ----------
+  // Some modules call NexoraSpine.normalizeCanvas/createContract/validateContract directly.
+  // In the browser these typically come from template-contract.js (merge-safe).
+  // In Node (or if script order changes), we provide safe fallbacks here.
+
+  function stableId(prefix){
+    try{
+      return (globalThis.crypto?.randomUUID?.() ||
+        (String(prefix||"id") + "_" + Math.random().toString(16).slice(2) + Date.now().toString(16)));
+    }catch(_){
+      return (String(prefix||"id") + "_" + Math.random().toString(16).slice(2) + Date.now().toString(16));
+    }
+  }
+
+  function normalizeCanvas(obj){
+    const w = Number(obj?.w ?? obj?.width);
+    const h = Number(obj?.h ?? obj?.height);
+    if(!Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0) return null;
+    const W = Math.round(w), H = Math.round(h);
+    // Provide both shapes so older/newer consumers work.
+    return { w: W, h: H, width: W, height: H };
+  }
+
+  function validateContract(contract){
+    try{
+      const v = root?.NexoraSpine?.validateContract;
+      if(typeof v === "function" && v !== validateContract) return !!v(contract);
+
+      if(!contract || typeof contract !== "object") return false;
+      if(contract.version !== "v1") return false;
+      if(!contract.templateId) return false;
+      if(!contract.category || typeof contract.category !== "string") return false;
+      if(!normalizeCanvas(contract.canvas)) return false;
+
+      if(!Array.isArray(contract.layers) || contract.layers.length < 1) return false;
+      for(const l of contract.layers){
+        if(!l || typeof l !== "object") return false;
+        if(!l.id || typeof l.id !== "string") return false;
+        if(!l.role || typeof l.role !== "string") return false;
+        // locked is optional for backwards-compat; treat missing as false
+        if(l.locked != null && typeof l.locked !== "boolean") return false;
+      }
+      if(!Array.isArray(contract.exportProfiles)) return false;
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  function createContract({ templateId, category, canvas, palette, layers, layoutFamily, layoutVariant }){
+    try{
+      const c = root?.NexoraSpine?.createContract;
+      if(typeof c === "function" && c !== createContract){
+        return c({ templateId, category, canvas, palette, layers, layoutFamily, layoutVariant });
+      }
+
+      const cv = normalizeCanvas(canvas) || normalizeCanvas(resolveCanvas(String(category||"Instagram Post")));
+      if(!cv) return null;
+
+      const tid = String(templateId || stableId("tpl"));
+      const cat = String(category || "Unknown");
+
+      const safePalette =
+        palette && typeof palette === "object"
+          ? { bg: palette.bg ?? palette.bg2 ?? null, accent: palette.accent ?? palette.accent2 ?? null, ink: palette.ink ?? null }
+          : null;
+
+      const ls = Array.isArray(layers) ? layers : [];
+      const normalizedLayers = ls.filter(Boolean).map((l)=>({
+        id: String(l.id || stableId("layer")),
+        role: String(l.role || "badge"),
+        locked: (typeof l.locked === 'boolean') ? l.locked : false
+      }));
+      if(!normalizedLayers.length) return null;
+
+      const contract = {
+        version: "v1",
+        templateId: tid,
+        category: cat,
+        canvas: cv,
+        palette: safePalette,
+        layers: normalizedLayers,
+        exportProfiles: [cat.replace(/\s+/g, "_").toLowerCase()],
+        layoutFamily: layoutFamily || null,
+        layoutVariant: layoutVariant || null,
+        createdAt: Date.now()
+      };
+
+      return validateContract(contract) ? contract : null;
+    }catch(_){
+      return null;
+    }
+  }
+
 
   return {
     // spine
@@ -416,6 +516,12 @@
     docToTemplate,
     createTemplateFromInput,
     // extensions
-    registerExtension
+    registerExtension,
+    // contract helpers (compat)
+    stableId,
+    normalizeCanvas,
+    createContract,
+    validateContract,
+    resolveCanvas
   };
 });
