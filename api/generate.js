@@ -135,7 +135,16 @@ try {
     const templates = makeTemplates({ prompt, category, style, count, divergenceIndex });
 
     const withContracts = templates.map((t, i) => {
-      const size = CATEGORIES[category] || { w: 1080, h: 1080 };
+      let size = { w: 1080, h: 1080 };
+try{
+  if(typeof __normalizeCategory === "function"){
+    const spec = __normalizeCategory(category);
+    if(spec && spec.canvas && spec.canvas.w && spec.canvas.h){
+      size = { w: spec.canvas.w, h: spec.canvas.h };
+    }
+  }
+}catch(_){}
+size = size || CATEGORIES[category] || { w:1080, h:1080 };
       const content = {
         headline: (t.elements||[]).find(e=>e.type==="text")?.text || "",
         subhead: (t.elements||[]).filter(e=>e.type==="text")[1]?.text || "",
