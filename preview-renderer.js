@@ -109,24 +109,35 @@
   }
 
   
-  function normalizeCanvas(contract){
+    function normalizeCanvas(contract, meta){
+    // 1) Prefer Spine's normalizer if present
     try{
-      if(window.CategorySpecV1 && typeof window.normalizeCategory === "function"){
-        const spec = window.normalizeCategory(contract?.category);
+      if(window.NexoraSpine && typeof window.NexoraSpine.normalizeCanvas === "function"){
+        const v = window.NexoraSpine.normalizeCanvas(contract?.canvas);
+        if(v && v.width && v.height) return v;
+      }
+    }catch(_){}
+
+    // 2) Use contract.canvas if valid
+    const w = Number(contract?.canvas?.width ?? contract?.canvas?.w);
+    const h = Number(contract?.canvas?.height ?? contract?.canvas?.h);
+    if(Number.isFinite(w) && Number.isFinite(h) && w>0 && h>0){
+      return { width: Math.round(w), height: Math.round(h) };
+    }
+
+    // 3) P5.1 fallback: derive canvas from CategorySpecV1 using category (prevents Instagram fallback aspect)
+    try{
+      const cat = (meta && meta.category) ? meta.category : (contract?.category || null);
+      if(cat && window.normalizeCategory && window.CategorySpecV1){
+        const id = window.normalizeCategory(cat);
+        const spec = window.CategorySpecV1[id];
         if(spec && spec.canvas && spec.canvas.w && spec.canvas.h){
-          return { width: spec.canvas.w, height: spec.canvas.h };
+          return { width: Math.round(spec.canvas.w), height: Math.round(spec.canvas.h) };
         }
       }
     }catch(_){}
-    try{
-      if(window.NexoraSpine && typeof window.NexoraSpine.normalizeCanvas === "function"){
-        return window.NexoraSpine.normalizeCanvas(contract?.canvas) || null;
-      }
-    }catch(_){}
-    const w = Number(contract?.canvas?.width ?? contract?.canvas?.w);
-    const h = Number(contract?.canvas?.height ?? contract?.canvas?.h);
-    if(!Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0) return null;
-    return { width: Math.round(w), height: Math.round(h) };
+
+    return null;
   }
 
   function renderInto(root, payload){
@@ -140,7 +151,7 @@
 
       clear(root);
 
-      const cv = normalizeCanvas(contract);
+      const cv = normalizeCanvas(contract, metaIn);
       if (cv?.width && cv?.height) {
         root.style.aspectRatio = cv.width + " / " + cv.height;
       }
