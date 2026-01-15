@@ -812,11 +812,17 @@ function renderThumb(thumb, tplOrElements, bg){
       (typeof content.headline === "string" && content.headline.trim()) ||
       (typeof content.subhead === "string" && content.subhead.trim()) ||
       (typeof content.cta === "string" && content.cta.trim()) ||
-      (typeof content.badge === "string" && content.badge.trim())
+      (typeof content.badge === "string" && content.badge.trim()) ||
+      (typeof content.body === "string" && content.body.trim()) ||
+      (typeof content.text === "string" && content.text.trim()) ||
+      (Array.isArray(content.paragraphs) && content.paragraphs.some(p => String(p||"").trim()))
     ));
+
     // Use Preview Renderer v1 ONLY when a real doc/content exists.
     // Otherwise, fall back to element-based thumb renderer to avoid blank previews.
-    if(tpl && tpl.contract && hasContent && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
+    const catName = String(tpl?.category || "").toLowerCase();
+    const forceLegacy = catName.includes("flyer") || catName.includes("story");
+    if(!forceLegacy && tpl && tpl.contract && hasContent && window.NexoraPreview && typeof window.NexoraPreview.renderTo === "function"){
       thumb.innerHTML = "";
       window.NexoraPreview.renderTo(thumb, { contract: tpl.contract, content });
       return;
