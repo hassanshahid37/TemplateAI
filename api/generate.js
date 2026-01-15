@@ -110,6 +110,7 @@ let category = rawCategory;
 try {
   const norm = await getNormalizeCategory();
   if (typeof norm === "function") {
+    __normalizeCategory = norm;
     const spec = norm(rawCategory);
     if (spec && typeof spec.label === "string" && spec.label.trim()) category = spec.label.trim();
   }
@@ -157,7 +158,14 @@ size = size || CATEGORIES[category] || { w:1080, h:1080 };
           e.type==="pill" || e.type==="chip" ? "cta" :
           "headline"
       }));
-            const contract = (t && t.contract) ? t.contract : buildContractV1(String(t?.id || ('tpl_'+String(i+1))), category, { w: size.w, h: size.h }, (t.elements||[]));
+            let contract = (t && t.contract) ? t.contract : buildContractV1(String(t?.id || ('tpl_'+String(i+1))), category, { w: size.w, h: size.h }, (t.elements||[]));
+      // P5.2: Template Shape Normalization (category-safe layers)
+      try{
+        if(typeof __normalizeCategory === "function"){
+          const spec = __normalizeCategory(category);
+          if(spec) contract = normalizeContractToSpec(contract, spec);
+        }
+      }catch(_){}
       return Object.assign({}, t, { contract, content });
     });
     return res.end(JSON.stringify({ success: true, templates: withContracts }));
@@ -796,6 +804,50 @@ function blocksToElements(blocks, canvas, pal, seed, labelText) {
   return els;
 }
 
+
+
+function normalizeContractToSpec(contract, spec){
+  try{
+    if(!contract || !spec || !spec.roles) return contract;
+    const required = Array.isArray(spec.roles.required) ? spec.roles.required : [];
+    const optional = Array.isArray(spec.roles.optional) ? spec.roles.optional : [];
+    const allowed = new Set([].concat(required, optional));
+
+    const maxPerRole = { badge: 3 };
+    const countByRole = Object.create(null);
+    const out = [];
+
+    const layers = Array.isArray(contract.layers) ? contract.layers : [];
+    for(const l of layers){
+      if(!l) continue;
+      const role = String(l.role || "");
+      if(!allowed.has(role)) continue;
+      const max = maxPerRole[role] || 1;
+      const cur = countByRole[role] || 0;
+      if(cur >= max) continue;
+      countByRole[role] = cur + 1;
+      out.push(l);
+    }
+
+    for(const r of required){
+      const role = String(r||"");
+      if((countByRole[role]||0) > 0) continue;
+      // create a stable placeholder layer id
+      let id = "auto_"+role;
+      if(out.some(x=>String(x.id||"")===id)) id = id + "_" + String(Date.now()).slice(-6);
+      out.push({ id, role, locked: Boolean(contract.layers?.[0]?.locked) });
+      countByRole[role] = 1;
+    }
+
+    if(out.length) contract.layers = out;
+    // keep roles metadata aligned if present
+    if(typeof contract.roles === "object") contract.roles = { required, optional };
+    return contract;
+  }catch(_){
+    return contract;
+  }
+}
+
 function buildContractV1(templateId, category, canvas, elements){
   try{
     const layers = (elements||[]).filter(Boolean).map((e, i)=>({
@@ -923,7 +975,7 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
 };
     const templateId = `tpl_${seed.toString(16)}_${i + 1}`;
     const pal = composed && composed._palette ? composed._palette : null;
-    const contract = {
+    let contract = {
       version: "v1",
       templateId,
       category,
@@ -933,6 +985,13 @@ function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
       exportProfiles: [String(category).replace(/\s+/g, "_").toLowerCase()],
       createdAt: Date.now()
 };
+
+    try{
+      if(typeof __normalizeCategory === "function"){
+        const spec = __normalizeCategory(category);
+        contract = normalizeContractToSpec(contract, spec);
+      }
+    }catch(_){/* no-op */}
 
     templates.push({
       id: templateId,
