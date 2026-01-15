@@ -131,7 +131,8 @@ try {
     const divergenceIndexRaw = body.divergenceIndex ?? body.forkIndex ?? body.variantIndex ?? body.i;
     let divergenceIndex = Number(divergenceIndexRaw);
     if (!Number.isFinite(divergenceIndex)) divergenceIndex = -1;
-    // P6: generate ONE base template, then expand to exactly `count` variations.
+
+    
     const variationCount = count;
     const baseCount = 1;
     const templates = makeTemplates({ prompt, category, style, count: baseCount, divergenceIndex });
@@ -220,7 +221,7 @@ function applyVariation(base, profile, idx){
     const t = JSON.parse(JSON.stringify(base || {}));
 
     // Unique ids to avoid UI/editor collisions
-    const baseId = String((t && (t.id || t.templateId || (t.contract && t.contract.templateId))) || "tpl");
+    const baseId = String((t && (t.id || t.templateId)) || "tpl");
     const vid = `__v${idx+1}_${String(profile && profile.id || "VAR")}`;
     t.id = baseId + vid;
     t.templateId = t.id;
@@ -230,48 +231,45 @@ function applyVariation(base, profile, idx){
     t.meta.variationId = String(profile && profile.id || "VAR");
     t.meta.variationIndex = idx;
 
-    // Pull visible text from elements (authoritative for preview)
-    const textEls = Array.isArray(t.elements) ? t.elements.filter(e => e && e.type === "text") : [];
-    const baseHeadline = (textEls[0] && typeof textEls[0].text === "string") ? textEls[0].text : (t.content && t.content.headline) ? String(t.content.headline) : "";
-    const baseSubhead  = (textEls[1] && typeof textEls[1].text === "string") ? textEls[1].text : (t.content && t.content.subhead) ? String(t.content.subhead) : "";
+    // Content density adjustments (NO role changes)
+    const headline = (t.content && t.content.headline) ? String(t.content.headline) : "";
+    const subhead  = (t.content && t.content.subhead) ? String(t.content.subhead) : "";
+    let newHeadline = headline;
+    let newSubhead  = subhead;
 
-    const words = String(baseHeadline).split(/\s+/).filter(Boolean);
-
-    let newHeadline = baseHeadline;
-    let newSubhead = baseSubhead;
+    const words = headline.split(/\s+/).filter(Boolean);
 
     if(profile && profile.id === "MINIMAL"){
       newHeadline = words.slice(0, 4).join(" ");
       newSubhead = "";
     } else if(profile && profile.id === "URGENT"){
-      newHeadline = (words.slice(0, 2).join(" ").toUpperCase()) || String(baseHeadline).toUpperCase();
-      newSubhead = (baseSubhead ? baseSubhead : "DON'T MISS").toUpperCase();
+      newHeadline = (words.slice(0, 2).join(" ").toUpperCase()) || headline.toUpperCase();
+      newSubhead = (subhead ? subhead : "DON'T MISS").toUpperCase();
     } else if(profile && profile.id === "IMAGE_FOCUS"){
-      newHeadline = words.slice(0, 5).join(" ") || baseHeadline;
+      newHeadline = words.slice(0, 5).join(" ");
     } else if(profile && profile.id === "HEADLINE_FOCUS"){
-      newHeadline = (baseHeadline ? baseHeadline : "NEW").toUpperCase();
+      newHeadline = (headline ? headline : "NEW").toUpperCase();
     } else {
-      newHeadline = words.slice(0, 7).join(" ") || baseHeadline;
+      newHeadline = words.slice(0, 7).join(" ") || headline;
     }
 
-    // Update content mirror (harmless if ignored)
     t.content = t.content || {};
     t.content.headline = newHeadline;
     t.content.subhead = newSubhead;
 
-    // Update visible elements so preview actually changes
+    // Apply visible text into elements[] (so previews actually change)
     if(Array.isArray(t.elements)){
-      let seen = 0;
+      let textSeen = 0;
       for(const el of t.elements){
         if(el && el.type === "text"){
-          if(seen === 0) el.text = newHeadline;
-          else if(seen === 1) el.text = newSubhead;
-          seen++;
+          if(textSeen === 0) el.text = newHeadline;
+          else if(textSeen === 1) el.text = newSubhead;
+          textSeen++;
         }
       }
     }
 
-    // Keep contract aligned with id to avoid collisions in editor/export
+    // Keep contract aligned with id
     if(t.contract && typeof t.contract === "object"){
       t.contract.templateId = t.id;
       t.contract.meta = t.contract.meta || {};
@@ -972,7 +970,7 @@ function buildContractV1(templateId, category, canvas, elements){
 
 function makeTemplates({ prompt, category, style, count, divergenceIndex }) {
   // YouTube Thumbnails: REAL archetypes (1–20) only
-  if (String(category || "").toLowerCase().includes("youtube")) {
+  if (false && String(category || "").toLowerCase().includes("youtube")) {
     return makeYouTubeArchetypeTemplates({ prompt, category, style, count, divergenceIndex });
   }
 
