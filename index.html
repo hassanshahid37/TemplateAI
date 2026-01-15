@@ -470,18 +470,25 @@
       const bgEl = elements.find(e => ["background","bg"].includes(String((e.type||e.role)||"").toLowerCase()));
       bgCss = (bgEl && String(bgEl.type||"").toLowerCase()==="bg" && bgEl.style==="radial" && (bgEl.fill2||bgEl.fill))
         ? `radial-gradient(120% 90% at 20% 10%, ${bgEl.fill2||bgEl.fill}, ${bgEl.fill||bgEl.fill2})`
-        : (bgEl?.fill || bgEl?.background || null);
+        : ((typeof bgEl?.fill === "string" ? bgEl.fill : null) || (typeof bgEl?.background === "string" ? bgEl.background : null) || null);
     }
     if(bgCss){
-      const s = String(bgCss);
-      if(s.includes("gradient")){
+      // Sanitize bgCss: only accept real strings/gradients. Prevent "[object Object]" from clearing background.
+      if(typeof bgCss !== "string") bgCss = null;
+    }
+    if(bgCss){
+      const s = String(bgCss).trim();
+      if(!s || s === "[object Object]"){
+        bgCss = null;
+      }else if(s.includes("gradient")){
         thumb.style.backgroundImage = s;
         thumb.style.backgroundColor = "";
       }else{
         thumb.style.backgroundImage = "";
         thumb.style.backgroundColor = s;
       }
-    }else{
+    }
+    if(!bgCss){
       // classy default
       thumb.style.backgroundImage = "linear-gradient(135deg, rgba(11,95,255,.55), rgba(136,71,255,.45))";
       thumb.style.backgroundColor = "";
@@ -1125,17 +1132,24 @@ function renderTemplatesFromList(list){
         const hasStyle = Array.isArray(t.elements) && t.elements.some(e => e && typeof e === "object" && e.style);
         const hasContract = !!t.contract;
 
-        const tpl = toEditorTemplate(t);
+
+        const catLower = String(cat || '').toLowerCase();
+
+
+        const forceRawPreview = catLower.includes('flyer') || catLower.includes('story');
+
+
+        const tplForPreview = forceRawPreview ? (t || {}) : toEditorTemplate(t);
 
         // SINGLE AUTHORITY ROUTING:
         // - Contract ALWAYS uses unified renderer
         // - After AI commit, legacy renderer is NEVER allowed (prevents renderer fights / flashing)
         if (hasContract || window.__NEXORA_AI_COMMITTED__) {
-          renderThumb(thumb, tpl, tpl.bg);
+          renderThumb(thumb, tplForPreview, (tplForPreview.bg || null));
         } else if (!isYT && !hasStyle && window.NexoraDesign && typeof window.NexoraDesign.renderPreview === "function") {
           window.NexoraDesign.renderPreview(t, thumb);
         } else {
-          renderThumb(thumb, tpl, tpl.bg);
+          renderThumb(thumb, tplForPreview, (tplForPreview.bg || null));
         }
       }
 
