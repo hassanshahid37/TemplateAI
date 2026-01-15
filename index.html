@@ -467,7 +467,7 @@
     // --- background ---
     let bgCss = bg || null;
     if(!bgCss && Array.isArray(elements)){
-      const bgEl = elements.find(e => ["background","bg"].includes(String(e.type||"").toLowerCase()));
+      const bgEl = elements.find(e => ["background","bg"].includes(String((e.type||e.role)||"").toLowerCase()));
       bgCss = (bgEl && String(bgEl.type||"").toLowerCase()==="bg" && bgEl.style==="radial" && (bgEl.fill2||bgEl.fill))
         ? `radial-gradient(120% 90% at 20% 10%, ${bgEl.fill2||bgEl.fill}, ${bgEl.fill||bgEl.fill2})`
         : (bgEl?.fill || bgEl?.background || null);
@@ -762,7 +762,7 @@
 
     // render in order; background handled separately already
     for(const e of list){
-      const type = String(e?.type || "").toLowerCase();
+      const type = String(e?.type || e?.role || "").toLowerCase();
       if(type === "bg" || type === "background") continue;
 
       let node = null;
@@ -930,7 +930,7 @@ function toEditorTemplate(tpl){
     const H = Number(tpl?.canvas?.h || 620);
 
     const outEls = elements.map((e, idx)=> {
-      const type = String(e.type||"card").toLowerCase();
+      const type = String(e.type||e.role||"card").toLowerCase();
       const id = e.id || (globalThis.crypto?.randomUUID?.() || (Math.random().toString(16).slice(2) + Date.now().toString(16)));
       const x = Number(e.x ?? 80), y = Number(e.y ?? 80);
       const w = Number(e.w ?? 320), h = Number(e.h ?? 120);
