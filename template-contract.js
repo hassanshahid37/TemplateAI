@@ -1,3 +1,4 @@
+
 /* template-contract.js — Nexora TemplateContract v1 (System Spine)
    Purpose: Shared contract builder + validator for templates.
    - Works in plain <script> environments (no bundler).
@@ -17,7 +18,7 @@
   const root = window.NexoraSpine = window.NexoraSpine || {};
 
   const VERSION = "v1";
-  const ROLE_SET = new Set(["background", "headline", "subhead", "image", "cta", "badge"]);
+  const ROLE_SET = new Set(["background", "headline", "subhead", "image", "cta", "badge", "logo"]);
 
   // Layout Families v1 (Instagram) — optional metadata only (validator ignores unknown keys)
   const LAYOUT_FAMILIES = {
@@ -69,7 +70,61 @@
     return { width: Math.round(w), height: Math.round(h) };
   }
 
-  function validateContract(contract) {
+  
+
+// --- P5.2: Template Shape Normalization (Category-Safe) ---
+// Additive + optional: only runs when CategorySpecV1 + normalizeCategory are present.
+// Guarantees: required roles exist, forbidden roles removed, duplicates capped (badge may repeat).
+function normalizeLayersForCategory(layers, category) {
+  try {
+    const norm = globalThis.normalizeCategory;
+    if (typeof norm !== "function") return layers;
+
+    const spec = norm(category);
+    if (!spec || !spec.roles) return layers;
+
+    const required = Array.isArray(spec.roles.required) ? spec.roles.required : [];
+    const optional = Array.isArray(spec.roles.optional) ? spec.roles.optional : [];
+    const allowed = new Set([].concat(required, optional).filter((r) => ROLE_SET.has(String(r))));
+
+    if (!allowed.size) return layers;
+
+    const maxPerRole = { badge: 3 }; // allow a few badges; everything else 1
+    const countByRole = Object.create(null);
+    const out = [];
+
+    for (const l of Array.isArray(layers) ? layers : []) {
+      if (!l) continue;
+      const role = String(l.role || "");
+      if (!allowed.has(role)) continue;
+
+      const max = maxPerRole[role] || 1;
+      const cur = countByRole[role] || 0;
+      if (cur >= max) continue;
+
+      countByRole[role] = cur + 1;
+      out.push(l);
+    }
+
+    // Ensure required roles exist (only those supported by ROLE_SET)
+    for (const r of required) {
+      const role = String(r || "");
+      if (!ROLE_SET.has(role)) continue;
+      if (!allowed.has(role)) continue;
+      if ((countByRole[role] || 0) > 0) continue;
+
+      const layer = { id: String(stableId("auto_" + role)), role, locked: true };
+      if (role === "background") out.unshift(layer);
+      else out.push(layer);
+      countByRole[role] = 1;
+    }
+
+    return out.length ? out : layers;
+  } catch {
+    return layers;
+  }
+}
+function validateContract(contract) {
     try {
       if (!contract || typeof contract !== "object") return false;
       if (contract.version !== VERSION) return false;
@@ -124,13 +179,16 @@
 
       if (!normalizedLayers.length) return null;
 
+      // P5.2: enforce category-safe template shape (optional)
+      const shapedLayers = normalizeLayersForCategory(normalizedLayers, cat);
+
       const contract = {
         version: VERSION,
         templateId: tid,
         category: cat,
         canvas: cv,
         palette: safePalette,
-        layers: normalizedLayers,
+        layers: shapedLayers || normalizedLayers,
         exportProfiles: [cat.replace(/\s+/g, "_").toLowerCase()],
         layoutFamily: lc.layoutFamily,
         layoutVariant: lc.layoutVariant,
