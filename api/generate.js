@@ -133,7 +133,9 @@ try {
     if (!Number.isFinite(divergenceIndex)) divergenceIndex = -1;
 
     
-    const templates = makeTemplates({ prompt, category, style, count, divergenceIndex });
+    const variationCount = count;
+    const baseCount = 1;
+    const templates = makeTemplates({ prompt, category, style, count: baseCount, divergenceIndex });
 
     const withContracts = templates.map((t, i) => {
       let size = { w: 1080, h: 1080 };
@@ -168,9 +170,16 @@ size = size || CATEGORIES[category] || { w:1080, h:1080 };
       }catch(_){}
       return Object.assign({}, t, { contract, content });
     });
-    return res.end(JSON.stringify({ success: true, templates: withContracts }));
-    
-  } catch (err) {
+    // ---- P6: Expand deterministic variations (no structural change) ----
+    const expanded = [];
+    const base = withContracts[0] || null;
+    if (!base) return res.end(JSON.stringify({ success: true, templates: [] }));
+    for (let i = 0; i < requestedCount; i++) {
+      const p = VARIATION_PROFILES[i % VARIATION_PROFILES.length];
+      expanded.push(applyVariation(base, p, i));
+    }
+    return res.end(JSON.stringify({ success: true, templates: expanded }));
+} catch (err) {
     // Hard-safe: NEVER return 500
     try {
       const templates = makeTemplates({
@@ -192,6 +201,95 @@ size = size || CATEGORIES[category] || { w:1080, h:1080 };
     }
   }
 };
+
+/* ===========================
+   AUTO_VARIATION_P6 (Additive)
+   - Deterministic variations within SAME template shape
+   - No layout / role / canvas changes
+=========================== */
+
+const VARIATION_PROFILES = [
+  { id: "HEADLINE_FOCUS", weight: { headline: 1.0, image: 0.3, badge: 0.6 }, density: "tight" },
+  { id: "IMAGE_FOCUS",    weight: { headline: 0.4, image: 1.0, badge: 0.5 }, density: "tight" },
+  { id: "BALANCED",       weight: { headline: 0.8, image: 0.8, badge: 0.5 }, density: "normal" },
+  { id: "MINIMAL",        weight: { headline: 0.7, image: 0.0, badge: 0.0 }, density: "short" },
+  { id: "URGENT",         weight: { headline: 0.9, image: 0.6, badge: 1.0 }, density: "punch" }
+];
+
+function applyVariation(base, profile, idx){
+  try{
+    const t = JSON.parse(JSON.stringify(base || {}));
+
+    // Unique ids to avoid UI/editor collisions
+    const baseId = String((t && (t.id || t.templateId)) || "tpl");
+    const vid = `__v${idx+1}_${String(profile && profile.id || "VAR")}`;
+    t.id = baseId + vid;
+    t.templateId = t.id;
+
+    // Meta for debugging
+    t.meta = t.meta || {};
+    t.meta.variationId = String(profile && profile.id || "VAR");
+    t.meta.variationIndex = idx;
+
+    // Content density adjustments (NO role changes)
+    const headline = (t.content && t.content.headline) ? String(t.content.headline) : "";
+    const subhead  = (t.content && t.content.subhead) ? String(t.content.subhead) : "";
+    let newHeadline = headline;
+    let newSubhead  = subhead;
+
+    const words = headline.split(/\s+/).filter(Boolean);
+
+    if(profile && profile.id === "MINIMAL"){
+      newHeadline = words.slice(0, 4).join(" ");
+      newSubhead = "";
+    } else if(profile && profile.id === "URGENT"){
+      newHeadline = (words.slice(0, 2).join(" ").toUpperCase()) || headline.toUpperCase();
+      newSubhead = (subhead ? subhead : "DON'T MISS").toUpperCase();
+    } else if(profile && profile.id === "IMAGE_FOCUS"){
+      newHeadline = words.slice(0, 5).join(" ");
+    } else if(profile && profile.id === "HEADLINE_FOCUS"){
+      newHeadline = (headline ? headline : "NEW").toUpperCase();
+    } else {
+      newHeadline = words.slice(0, 7).join(" ") || headline;
+    }
+
+    t.content = t.content || {};
+    t.content.headline = newHeadline;
+    t.content.subhead = newSubhead;
+
+    // Apply visible text into elements[] (so previews actually change)
+    if(Array.isArray(t.elements)){
+      let textSeen = 0;
+      for(const el of t.elements){
+        if(el && el.type === "text"){
+          if(textSeen === 0) el.text = newHeadline;
+          else if(textSeen === 1) el.text = newSubhead;
+          textSeen++;
+        }
+      }
+    }
+
+    // Keep contract aligned with id
+    if(t.contract && typeof t.contract === "object"){
+      t.contract.templateId = t.id;
+      t.contract.meta = t.contract.meta || {};
+      t.contract.meta.variationId = t.meta.variationId;
+      t.contract.meta.variationIndex = t.meta.variationIndex;
+    }
+
+    // Emphasis flags (safe to ignore)
+    t.emphasis = {
+      headline: profile && profile.weight ? profile.weight.headline : 0.8,
+      image: profile && profile.weight ? profile.weight.image : 0.8,
+      badge: profile && profile.weight ? profile.weight.badge : 0.5
+    };
+
+    return t;
+  }catch(_){
+    return base;
+  }
+}
+
 
 /* ===========================
    Deterministic Composition Engine
