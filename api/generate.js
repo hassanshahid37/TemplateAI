@@ -161,6 +161,77 @@ try {
     const baseCount = 1;
     const templates = makeTemplates({ prompt, category, style, count: baseCount, divergenceIndex });
 
+    // ---- VISIBILITY FALLBACKS (YouTube + Logo) ----
+    // Goal: ensure previews never look "empty" even if some layouts omit text roles.
+    // This is additive-only: we only inject a visible text element when required.
+    try {
+      templates.forEach(t => {
+        const cat = String(category || "").toLowerCase();
+        const promptText = String(prompt || "").trim();
+        if(!promptText) return;
+
+        // Best-effort canvas size (for positioning)
+        const cw =
+          (t && t.canvas && (t.canvas.w || t.canvas.width)) ||
+          (t && t.contract && t.contract.canvas && (t.contract.canvas.w || t.contract.canvas.width)) ||
+          (cat.includes("youtube") ? 1280 : (cat.includes("logo") ? 1000 : 1080));
+        const ch =
+          (t && t.canvas && (t.canvas.h || t.canvas.height)) ||
+          (t && t.contract && t.contract.canvas && (t.contract.canvas.h || t.contract.canvas.height)) ||
+          (cat.includes("youtube") ? 720 : (cat.includes("logo") ? 1000 : 1080));
+
+        const els = Array.isArray(t.elements) ? t.elements : (t.elements = []);
+
+        const hasHeadline = els.some(e => e && String(e.role || e.type || "").toLowerCase() === "headline" && (e.text || e.value));
+        const hasAnyText = els.some(e => e && e.type === "text" && (e.text || e.value));
+
+        // YouTube Thumbnail: ensure a BIG readable headline exists
+        if (cat.includes("youtube") && !hasHeadline) {
+          els.unshift({
+            id: "yt_headline_fallback",
+            type: "text",
+            role: "headline",
+            x: Math.round(cw * 0.06),
+            y: Math.round(ch * 0.10),
+            w: Math.round(cw * 0.88),
+            h: Math.round(ch * 0.42),
+            text: promptText,
+            size: Math.max(44, Math.round(ch * 0.14)),
+            weight: 900,
+            color: "#ffffff",
+            align: "left",
+            lineHeight: 1.02,
+            letterSpacing: -0.5,
+            shadow: { x: 0, y: Math.round(ch * 0.01), blur: Math.round(ch * 0.03), color: "rgba(0,0,0,0.55)" }
+          });
+        }
+
+        // Logo: wordmark fallback (centered headline)
+        if (cat.includes("logo") && !hasAnyText) {
+          els.unshift({
+            id: "logo_wordmark_fallback",
+            type: "text",
+            role: "headline",
+            x: Math.round(cw * 0.08),
+            y: Math.round(ch * 0.40),
+            w: Math.round(cw * 0.84),
+            h: Math.round(ch * 0.22),
+            text: promptText,
+            size: Math.max(48, Math.round(ch * 0.12)),
+            weight: 900,
+            color: "#ffffff",
+            align: "center",
+            lineHeight: 1.05,
+            letterSpacing: -0.2,
+            shadow: { x: 0, y: Math.round(ch * 0.008), blur: Math.round(ch * 0.02), color: "rgba(0,0,0,0.35)" }
+          });
+        }
+      });
+    } catch (_) {}
+    // ---- END VISIBILITY FALLBACKS ----
+
+
+
     // ---- P7: decide layout family ONCE per request (safe + deterministic) ----
     let __p7LayoutFamily = null;
     try{
