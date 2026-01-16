@@ -11,6 +11,10 @@ if (typeof window !== 'undefined') {
    No external deps. Exposes window.NexoraDesign.
 */
 (function(){
+  try{
+    if (typeof window !== "undefined" && window.__NEXORA_AI_COMMITTED__) return;
+  }catch(_){ }
+
   // Prevent double / late renders after AI preview
 
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
