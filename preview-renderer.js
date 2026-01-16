@@ -1,5 +1,6 @@
 
 
+
 /**
  * preview-renderer.js — Nexora Preview Renderer v1
  * Spine-correct, client-only, deterministic renderer
@@ -59,6 +60,7 @@
 
     wrap.style.position = "relative";
     wrap.style.margin = "12px";
+    wrap.style.zIndex = "1";
 
     const applyStyle = window.applyStyle || noop;
     const style = applyStyle({
@@ -70,6 +72,9 @@
     if (role === "background") {
       wrap.style.position = "absolute";
       wrap.style.inset = "0";
+      wrap.style.margin = "0";
+      wrap.style.zIndex = "0";
+      wrap.style.pointerEvents = "none";
       wrap.style.background = meta.palette?.bg || "#111";
       return wrap;
     }
@@ -118,16 +123,14 @@
 
     return wrap;
   }
-
-  
-    function normalizeCanvas(contract, meta){
+  function normalizeCanvas(contract, meta){
     // 1) Prefer Spine's normalizer if present
     try{
       if(window.NexoraSpine && typeof window.NexoraSpine.normalizeCanvas === "function"){
         const v = window.NexoraSpine.normalizeCanvas(contract?.canvas);
         if(v && v.width && v.height) return v;
       }
-    }catch(_){}
+    }catch(_){ }
 
     // 2) Use contract.canvas if valid
     const w = Number(contract?.canvas?.width ?? contract?.canvas?.w);
@@ -136,17 +139,17 @@
       return { width: Math.round(w), height: Math.round(h) };
     }
 
-    // 3) P5.1 fallback: derive canvas from CategorySpecV1 using category (prevents Instagram fallback aspect)
+    // 3) P5.1 fallback: derive canvas from CategorySpecV1 using category
     try{
       const cat = (meta && meta.category) ? meta.category : (contract?.category || null);
       if(cat && window.normalizeCategory && window.CategorySpecV1){
-        const id = window.normalizeCategory(cat);
-        const spec = window.CategorySpecV1[id];
+        const norm = window.normalizeCategory(cat);
+        const spec = (norm && typeof norm === "object") ? norm : (window.CategorySpecV1[String(norm || "")] || null);
         if(spec && spec.canvas && spec.canvas.w && spec.canvas.h){
           return { width: Math.round(spec.canvas.w), height: Math.round(spec.canvas.h) };
         }
       }
-    }catch(_){}
+    }catch(_){ }
 
     return null;
   }
@@ -162,6 +165,10 @@
 
       clear(root);
 
+      // Ensure absolute layers (e.g., background) are scoped to this root
+      try{ root.style.position = root.style.position || "relative"; }catch(_){ }
+      try{ root.style.overflow = root.style.overflow || "hidden"; }catch(_){ }
+
       const cv = normalizeCanvas(contract, metaIn);
       if (cv?.width && cv?.height) {
         root.style.aspectRatio = cv.width + " / " + cv.height;
@@ -173,8 +180,42 @@
         palette: metaIn.palette || contract.palette || {}
       };
 
-      const layers = Array.isArray(contract.layers) ? contract.layers : [];
-      layers.forEach(layer => {
+      // P7: render order is spine-authoritative.
+      // If a layout family exists and a registry is present, honor its hierarchy to avoid preview drift.
+      const baseLayers = Array.isArray(contract.layers) ? contract.layers : [];
+      const ordered = (function(){
+        try{
+          const famId = contract && contract.layoutFamily ? String(contract.layoutFamily) : "";
+          const reg = window.NexoraLayoutRegistry;
+          if(!famId || !reg) return baseLayers;
+
+          // Registry API is contract: getLayoutFamily(id) (preferred)
+          // Fallbacks are kept to avoid regressions if registry shape changes.
+          const fam =
+            (typeof reg.getLayoutFamily === "function") ? reg.getLayoutFamily(famId) :
+            (reg.REGISTRY && reg.REGISTRY[famId]) ? reg.REGISTRY[famId] :
+            (typeof reg.get === "function") ? reg.get(famId) :
+            (reg[famId] || null);
+          const hierarchy = Array.isArray(fam?.hierarchy) ? fam.hierarchy : null;
+          if(!hierarchy || !hierarchy.length) return baseLayers;
+          const idx = new Map(hierarchy.map((r,i)=>[String(r), i]));
+          // Stable sort: background first, then hierarchy order, then anything else.
+          return baseLayers.slice().sort((a,b)=>{
+            const ra = String(a?.role||"");
+            const rb = String(b?.role||"");
+            if(ra === "background" && rb !== "background") return -1;
+            if(rb === "background" && ra !== "background") return 1;
+            const ia = idx.has(ra) ? idx.get(ra) : 1e9;
+            const ib = idx.has(rb) ? idx.get(rb) : 1e9;
+            if(ia != ib) return ia - ib;
+            return 0;
+          });
+        }catch(_){
+          return baseLayers;
+        }
+      })();
+
+      ordered.forEach(layer => {
         const node = renderLayer(layer, content, meta);
         if (node) root.appendChild(node);
       });
