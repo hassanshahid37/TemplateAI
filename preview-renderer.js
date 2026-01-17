@@ -1,6 +1,7 @@
 
 
 
+
 /**
  * preview-renderer.js — Nexora Preview Renderer v1
  * Spine-correct, client-only, deterministic renderer
@@ -65,7 +66,7 @@
     const applyStyle = window.applyStyle || noop;
     const style = applyStyle({
       category: meta.category,
-      archetype: meta.style,
+      archetype: meta.archetype || meta.style,
       elementType: role
     });
 
